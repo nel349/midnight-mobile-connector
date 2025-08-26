@@ -15,7 +15,7 @@ export default function MidnightWasmLoader() {
   const webViewRef = useRef<WebView>(null);
   const [testResult, setTestResult] = useState<WasmTestResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [wasmBase64, setWasmBase64] = useState<string | null>(null);
+  const [wasmData, setWasmData] = useState<{wasmBase64: string, jsCode: string} | null>(null);
 
   // Load WASM file from React Native assets on component mount
   useEffect(() => {
@@ -46,7 +46,7 @@ export default function MidnightWasmLoader() {
         console.log(`WASM file loaded as base64: ${(base64String.length / 1024 / 1024 * 3/4).toFixed(1)}MB`);
         console.log(`JS glue code available: ${(wasmGlueCode.length / 1024).toFixed(1)}KB`);
         
-        setWasmBase64(JSON.stringify({ wasmBase64: base64String, jsCode: wasmGlueCode }));
+        setWasmData({ wasmBase64: base64String, jsCode: wasmGlueCode });
         
       } catch (error) {
         console.error('Failed to load WASM file:', error);
@@ -58,15 +58,22 @@ export default function MidnightWasmLoader() {
   }, []);
 
   const handleWebViewMessage = (event: any) => {
+    // Clear any pending timeout
+    if ((window as any).wasmTestTimeout) {
+      clearTimeout((window as any).wasmTestTimeout);
+      (window as any).wasmTestTimeout = null;
+    }
+    
     try {
+      console.log('📨 Received WebView message:', event.nativeEvent.data.substring(0, 200));
       const result: WasmTestResult = JSON.parse(event.nativeEvent.data);
       setTestResult(result);
       setIsLoading(false);
       
       if (result.success) {
-        Alert.alert('WASM Test Success!', result.message);
+        console.log('✅ WASM Test Success:', result.message);
       } else {
-        Alert.alert('WASM Test Failed', result.message);
+        console.error('❌ WASM Test Failed:', result.message);
       }
     } catch (error) {
       console.error('Failed to parse WebView message:', error);
@@ -74,19 +81,40 @@ export default function MidnightWasmLoader() {
     }
   };
 
+  const getButtonTitle = (): string => {
+    if (isLoading) return "Testing...";
+    if (wasmData) return "Test Midnight WASM";
+    return "Loading WASM...";
+  };
+
   const testWasmLoading = () => {
-    if (!wasmBase64) {
-      Alert.alert('WASM Not Ready', 'WASM files are still loading. Please wait...');
+    if (!wasmData) {
+      console.warn('WASM Not Ready - files are still loading. Please wait...');
       return;
     }
     
     setIsLoading(true);
     setTestResult(null);
     
+    // Add timeout to prevent indefinite loading
+    const timeout = setTimeout(() => {
+      console.error('⏰ WebView test timed out after 10 seconds');
+      setIsLoading(false);
+      setTestResult({
+        success: false,
+        message: 'Test timed out - WebView may have crashed or hung'
+      });
+    }, 10000);
+    
+    // Store timeout so we can clear it when we get a response
+    (window as any).wasmTestTimeout = timeout;
+    
+    console.log('🚀 Sending message to WebView...');
+    
     // Send message to WebView with WASM data and JS glue code
     webViewRef.current?.postMessage(JSON.stringify({
       action: 'testMidnightWasm',
-      wasmData: wasmBase64,
+      wasmData: wasmData,
       timestamp: Date.now()
     }));
   };
@@ -118,24 +146,95 @@ export default function MidnightWasmLoader() {
 
         // Listen for messages from React Native
         window.addEventListener('message', async (event) => {
-            console.log('Received message:', event.data);
+            console.log('=== WebView Message Received ===');
+            console.log('Raw event.data type:', typeof event.data);
+            console.log('Raw event.data length:', event.data.length);
+            console.log('Raw event.data first 200 chars:', event.data.substring(0, 200));
+            
             try {
+                console.log('Parsing JSON message...');
                 const { action, wasmData, timestamp } = JSON.parse(event.data);
+                console.log('✓ JSON parsed successfully');
+                console.log('action:', action);
+                console.log('wasmData type:', typeof wasmData);
+                console.log('timestamp:', timestamp);
                 
                 if (action === 'testMidnightWasm') {
-                    console.log('Starting Midnight WASM test');
+                    console.log('📥 WebView received testMidnightWasm message');
                     
-                    // First, test if basic communication is working
+                    // Send immediate response to confirm WebView is working
                     sendMessage({
                         success: true,
-                        message: 'WebView received Midnight WASM test message'
+                        message: 'WebView received message and is responding!'
                     });
+                    return;
                     
-                    // For now, let's test basic functionality first
+                    try {
+                        const { wasmBase64, jsCode } = wasmData;
+                        console.log('✓ Data access successful');
+                        console.log('WASM size:', (wasmBase64.length / 1024 / 1024 * 3/4).toFixed(1) + 'MB');
+                        console.log('JS size:', (jsCode.length / 1024).toFixed(1) + 'KB');
+                        
+                        // Step 2: Try ES6 transformation
+                        console.log('=== Starting ES6 transformation ===');
+                        console.log('About to transform JS code...');
+                        
+                        try {
+                            console.log('Inside transformation try block');
+                            const transformedJsCode = jsCode
+                                .replace(/export function /g, 'exports.')
+                                .replace(/export const /g, 'exports.')
+                                .replace(/export let /g, 'exports.')
+                                .replace(/export var /g, 'exports.');
+                            
+                            console.log('✓ ES6 transformation completed - replacements done');
+                            console.log('Original code starts with:', jsCode.substring(0, 100));
+                            console.log('Transformed code starts with:', transformedJsCode.substring(0, 100));
+                            console.log('Transformation changed', (jsCode.length - transformedJsCode.length), 'characters');
+                            
+                            // Step 3: Try simplified JS glue execution
+                            try {
+                                const moduleExports = {};
+                                
+                                // Create a much simpler wrapper first
+                                const simpleWrapper = '(function(exports) { return exports; })';
+                                
+                                const testFunction = eval(simpleWrapper);
+                                const testResult = testFunction(moduleExports);
+                                
+                                sendMessage({
+                                    success: true,
+                                    message: 'Simple eval test successful! Ready for full glue execution.'
+                                });
+                                
+                            } catch (evalError) {
+                                sendMessage({
+                                    success: false,
+                                    message: 'Simple eval test failed: ' + evalError.message
+                                });
+                                return;
+                            }
+                            
+                        } catch (transformError) {
+                            console.error('ES6 transformation failed:', transformError);
+                            sendMessage({
+                                success: false,
+                                message: 'ES6 transformation failed: ' + transformError.message
+                            });
+                            return;
+                        }
+                        
+                    } catch (dataError) {
+                        console.error('Data access failed:', dataError);
+                        sendMessage({
+                            success: false,
+                            message: 'Data access failed: ' + dataError.message
+                        });
+                        return;
+                    }
+                    
+                    // Also run basic test 
                     await testBasicFunctionality();
-                    
-                    // Later we'll add: const { wasmBase64, jsCode } = JSON.parse(wasmData);
-                    // Later we'll add: await testMidnightWasm(wasmBase64, jsCode);
                 } else if (action === 'testWasm') {
                     console.log('Starting basic WASM test');
                     await testBasicFunctionality();
@@ -361,9 +460,9 @@ export default function MidnightWasmLoader() {
       <Text style={styles.title}>Midnight WASM WebView Test</Text>
       
       <Button
-        title={isLoading ? "Testing..." : wasmBase64 ? "Test Midnight WASM" : "Loading WASM..."}
+        title={getButtonTitle()}
         onPress={testWasmLoading}
-        disabled={isLoading || !wasmBase64}
+        disabled={isLoading || !wasmData}
       />
       
       {testResult && (
