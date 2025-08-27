@@ -161,13 +161,27 @@ export default function MidnightWasmLoader() {
                 
                 if (action === 'testMidnightWasm') {
                     console.log('📥 WebView received testMidnightWasm message');
+                    console.log('wasmData type:', typeof wasmData);
+                    console.log('wasmData keys:', Object.keys(wasmData));
                     
-                    // Send immediate response to confirm WebView is working
-                    sendMessage({
-                        success: true,
-                        message: 'WebView received message and is responding!'
-                    });
-                    return;
+                    try {
+                        const { wasmBase64, jsCode } = wasmData;
+                        console.log('✅ Data access successful');
+                        console.log('WASM size:', (wasmBase64.length / 1024 / 1024 * 3/4).toFixed(1) + 'MB');
+                        console.log('JS size:', (jsCode.length / 1024).toFixed(1) + 'KB');
+                        
+                        sendMessage({
+                            success: true,
+                            message: 'WASM data accessed successfully in WebView!'
+                        });
+                        
+                    } catch (dataError) {
+                        console.error('❌ Data access failed:', dataError);
+                        sendMessage({
+                            success: false,
+                            message: 'Data access failed: ' + dataError.message
+                        });
+                    }
                     
                     try {
                         const { wasmBase64, jsCode } = wasmData;
