@@ -9,11 +9,6 @@ window.addEventListener('message', async (event) => {
     try {
         const { action, wasmData, wasmLoaderCode } = JSON.parse(event.data);
         if (action === 'testMidnightWasm') {
-            // Dynamically load the WASM loader function
-            console.log('WASM loader code length:', wasmLoaderCode.length);
-            console.log('First 200 chars:', wasmLoaderCode.substring(0, 200));
-            
-            // Use Function constructor instead of eval for better parsing
             const loaderFunction = new Function(wasmLoaderCode);
             loaderFunction();
             

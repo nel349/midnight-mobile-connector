@@ -2,15 +2,13 @@ import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Asset } from 'expo-asset';
-import { wasmGlueCode } from '../assets/wasmGlue';
 import { webviewScript } from '../webview-script';
 import { wasmLoaderScript } from '../webview/wasmLoader';
+import { zswapGlueCode } from '../assets/zswapGlueCode';
 
 interface WasmTestResult {
   success: boolean;
   message: string;
-  loadTime?: number;
-  memoryUsage?: number;
 }
 
 export default function MidnightWasmLoader() {
@@ -25,30 +23,29 @@ export default function MidnightWasmLoader() {
       try {
         console.log('Loading assets...');
         
-        console.log(`WebView script loaded: ${(webviewScript.length / 1024).toFixed(1)}KB`);
-        console.log(`WASM loader loaded: ${(wasmLoaderScript.length / 1024).toFixed(1)}KB`);
+        console.log('🎯 USING REAL ZSWAP GLUE FILE - This should work!');
         
-        // Load WASM file 
-        const wasmAsset = Asset.fromModule(require('../assets/midnight_onchain_runtime_wasm_bg.wasm'));
-        await wasmAsset.downloadAsync();
+        // Load zswap WASM file (the one with SecretKeys.fromSeed)
+        const zswapWasmAsset = Asset.fromModule(require('../assets/midnight_zswap_wasm_bg.wasm'));
+        await zswapWasmAsset.downloadAsync();
         
-        // Read the WASM file as base64
-        const wasmResponse = await fetch(wasmAsset.localUri!);
-        const arrayBuffer = await wasmResponse.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
+        // Read zswap WASM as base64
+        const zswapResponse = await fetch(zswapWasmAsset.localUri!);
+        const zswapArrayBuffer = await zswapResponse.arrayBuffer();
+        const zswapBytes = new Uint8Array(zswapArrayBuffer);
         
-        // Convert to base64
-        let base64 = '';
+        let zswapBase64 = '';
         const chunk = 8192;
-        for (let i = 0; i < bytes.length; i += chunk) {
-          const slice = bytes.slice(i, i + chunk);
-          base64 += String.fromCharCode.apply(null, Array.from(slice));
+        for (let i = 0; i < zswapBytes.length; i += chunk) {
+          const slice = zswapBytes.slice(i, i + chunk);
+          zswapBase64 += String.fromCharCode.apply(null, Array.from(slice));
         }
-        const base64String = btoa(base64);
+        const zswapBase64String = btoa(zswapBase64);
         
-        console.log(`Assets loaded - WASM: ${(base64String.length / 1024 / 1024 * 3/4).toFixed(1)}MB`);
+        console.log(`Zswap WASM loaded: ${(zswapBase64String.length / 1024 / 1024 * 3/4).toFixed(1)}MB`);
+        console.log(`Zswap glue code loaded: ${(zswapGlueCode.length / 1024).toFixed(1)}KB`);
         
-        setWasmData({ wasmBase64: base64String, jsCode: wasmGlueCode });
+        setWasmData({ wasmBase64: zswapBase64String, jsCode: zswapGlueCode });
         
       } catch (error) {
         console.error('Failed to load assets:', error);
@@ -68,48 +65,36 @@ export default function MidnightWasmLoader() {
     
     try {
       console.log('📨 Received WebView message:', event.nativeEvent.data.substring(0, 200));
-      const result: WasmTestResult = JSON.parse(event.nativeEvent.data);
+      const result = JSON.parse(event.nativeEvent.data);
+      
+      if (result.success && result.message === 'WebView ready') {
+        console.log('✅ WebView is ready');
+        return;
+      }
+      
       setTestResult(result);
       setIsLoading(false);
       
       if (result.success) {
         console.log('✅ WASM Test Success:', result.message);
       } else {
-        console.error('❌ WASM Test Failed:', result.message);
+        console.log('❌ WASM Test Failed:', result.message);
       }
     } catch (error) {
       console.error('Failed to parse WebView message:', error);
+      setTestResult({ success: false, message: 'Failed to parse message' });
       setIsLoading(false);
     }
   };
 
-  const getButtonTitle = (): string => {
-    if (isLoading) return "Testing...";
-    if (wasmData) return "Test Midnight WASM";
-    return "Loading Assets...";
-  };
-
   const testWasmLoading = () => {
     if (!wasmData) {
-      console.warn('Assets not ready - files are still loading. Please wait...');
+      Alert.alert('Error', 'Assets not loaded yet');
       return;
     }
     
     setIsLoading(true);
     setTestResult(null);
-    
-    // Add timeout to prevent indefinite loading
-    const timeout = setTimeout(() => {
-      console.error('⏰ WebView test timed out after 10 seconds');
-      setIsLoading(false);
-      setTestResult({
-        success: false,
-        message: 'Test timed out - WebView may have crashed or hung'
-      });
-    }, 10000);
-    
-    // Store timeout so we can clear it when we get a response
-    (window as any).wasmTestTimeout = timeout;
     
     console.log('🚀 Sending message to WebView...');
     console.log('WASM loader script first 200 chars:', wasmLoaderScript.substring(0, 200));
@@ -122,37 +107,27 @@ export default function MidnightWasmLoader() {
     };
     
     console.log('Message JSON first 300 chars:', JSON.stringify(message).substring(0, 300));
+    console.log('wasmData:', wasmData ? 'EXISTS' : 'NULL');
+    console.log('wasmData.jsCode:', wasmData?.jsCode ? `EXISTS (${wasmData.jsCode.length} chars)` : 'NULL');
     
     // Send message to WebView with WASM data, JS glue code, and loader code
     webViewRef.current?.postMessage(JSON.stringify(message));
-  };
-
-  const getWebViewHTML = (): string => {
-    return `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Midnight WASM Test - Clean</title>
-</head>
-<body>
-    <div id="status">WebView loaded, waiting for script injection...</div>
-</body>
-</html>`;
-  };
-  
-  const getInjectedJavaScript = (): string => {
-    // Just inject the minimal webview script, load WASM code via postMessage
-    console.log('Injecting minimal script, length:', webviewScript.length);
-    return webviewScript + '; true;';
+    
+    // Set a timeout to detect hangs
+    (window as any).wasmTestTimeout = setTimeout(() => {
+      console.log('⚠️ WASM test timed out after 60 seconds');
+      setTestResult({ success: false, message: 'Test timed out after 60 seconds' });
+      setIsLoading(false);
+    }, 60000);
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Midnight WASM WebView Test</Text>
+      <Text style={styles.title}>Midnight WASM Test</Text>
+      <Text style={styles.subtitle}>SecretKeys.fromSeed() - Step 1 of Wallet Building</Text>
       
       <Button
-        title={getButtonTitle()}
+        title={isLoading ? "Testing..." : "Test SecretKeys.fromSeed()"}
         onPress={testWasmLoading}
         disabled={isLoading || !wasmData}
       />
@@ -165,29 +140,22 @@ export default function MidnightWasmLoader() {
           ]}>
             {testResult.success ? '✅' : '❌'} {testResult.message}
           </Text>
-          {testResult.loadTime && (
-            <Text style={styles.detailText}>
-              Load Time: {testResult.loadTime.toFixed(2)}ms
-            </Text>
-          )}
-          {testResult.memoryUsage && (
-            <Text style={styles.detailText}>
-              Memory Usage: {(testResult.memoryUsage / 1024 / 1024).toFixed(2)}MB
-            </Text>
-          )}
         </View>
       )}
       
+      <Text style={styles.statusText}>
+        Assets: {wasmData ? 'Loaded' : 'Loading...'}
+      </Text>
+      
       <WebView
         ref={webViewRef}
-        source={{ html: getWebViewHTML() }}
-        injectedJavaScript={getInjectedJavaScript()}
+        source={{ html: `<html><body><div id="status">WebView Loading...</div></body></html>` }}
         onMessage={handleWebViewMessage}
-        style={styles.hiddenWebView}
+        injectedJavaScript={webviewScript}
+        style={styles.webView}
         javaScriptEnabled={true}
-        domStorageEnabled={true}
-        allowsInlineMediaPlayback={false}
-        mediaPlaybackRequiresUserAction={false}
+        onError={(error) => console.error('WebView error:', error)}
+        onLoad={() => console.log('WebView loaded')}
       />
     </View>
   );
@@ -203,7 +171,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 14,
+    textAlign: 'center',
     marginBottom: 20,
+    color: '#666',
   },
   resultContainer: {
     marginTop: 20,
@@ -216,15 +190,14 @@ const styles = StyleSheet.create({
   resultText: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 5,
   },
-  detailText: {
-    fontSize: 14,
+  statusText: {
+    marginTop: 10,
+    textAlign: 'center',
     color: '#666',
-    marginTop: 2,
   },
-  hiddenWebView: {
-    height: 0,
-    width: 0,
+  webView: {
+    height: 1,
+    opacity: 0,
   },
 });

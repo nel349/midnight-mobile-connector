@@ -13,32 +13,115 @@ Build a privacy-first mobile wallet for Midnight Network that runs all cryptogra
 
 ---
 
-## 🚀 **Phase 1: Core Wallet Functions**
+## 🚀 **Phase 1: Core Wallet Functions (CURRENT)**
 
 ### **Objectives**
-Prove that Midnight's core cryptographic functions work on mobile and create a developer-friendly API.
+Build wallet functions step-by-step using a **systematic, gradual approach**. Focus on one function at a time.
 
-### **Tasks**
-1. **Test Midnight Core Functions**
-   - [ ] Key generation (`generateKeys()`, seed phrases)
-   - [ ] Address derivation (public + private addresses)
-   - [ ] Balance queries (`getBalance()`)
-   - [ ] Transaction building (`buildTransaction()`)
-   - [ ] Zero-knowledge proof generation (`generateProof()`)
-   - [ ] Transaction signing and verification
+### **Step-by-Step Implementation Plan**
 
-2. **Create Mobile API Wrapper**
-   - [ ] Design clean React Native interface
-   - [ ] Handle async operations properly
-   - [ ] Add error handling and validation
-   - [ ] Create TypeScript types/interfaces
-   - [ ] Add logging and debugging utilities
+#### **🎯 STEP 1: SecretKeys.fromSeed() - FOUNDATION**
+**Status**: 🔄 IN PROGRESS
+**Goal**: Get basic wallet key generation working
 
-3. **Testing & Validation**
-   - [ ] Unit tests for each core function
-   - [ ] Performance benchmarks (key gen, proof time, etc.)
-   - [ ] Memory usage analysis
-   - [ ] Error scenario testing
+1. **Tasks (Current Focus)**:
+   - [x] Load zswap WASM module (contains SecretKeys class)
+   - [x] Create minimal glue code with SecretKeys class only
+   - [ ] ✅ **TEST: SecretKeys.fromSeed(hexSeed) works**
+   - [ ] Add error handling for invalid seeds
+   - [ ] Test with different seed formats (hex vs bytes)
+
+2. **Success Criteria**:
+   - `SecretKeys.fromSeed("0123...abcdef")` returns valid SecretKeys object
+   - No crashes or errors
+   - Can call method multiple times
+
+**⚠️ BLOCKED UNTIL**: SecretKeys.fromSeed() test passes
+
+---
+
+#### **🎯 STEP 2: Seed Generation - CREATE NEW WALLETS**
+**Status**: ⏸️ WAITING FOR STEP 1
+**Goal**: Generate random seeds for new wallets
+
+1. **Tasks**:
+   - [ ] Research: What seed format does SecretKeys.fromSeed() expect?
+   - [ ] Implement: Generate cryptographically secure random seeds
+   - [ ] Test: `createNewWallet()` returns {wallet, seed}
+   - [ ] Validate: Seed can be used to restore wallet later
+
+2. **Success Criteria**:
+   - Generate 32-byte random seed as hex string
+   - Seeds work with SecretKeys.fromSeed()
+   - Each generated seed is unique
+
+---
+
+#### **🎯 STEP 3: Public Key Extraction - ADDRESSES**
+**Status**: ⏸️ WAITING FOR STEP 2
+**Goal**: Get wallet addresses from SecretKeys
+
+1. **Tasks**:
+   - [ ] Find: What methods does SecretKeys have for public keys?
+   - [ ] Test: Extract coinPublicKey and encryptionPublicKey
+   - [ ] Format: Convert keys to proper address format
+   - [ ] Validate: Addresses are valid Midnight addresses
+
+2. **Success Criteria**:
+   - `wallet.getCoinPublicKey()` returns valid public key
+   - `wallet.getEncryptionPublicKey()` returns valid encryption key
+   - Keys can be displayed to user as wallet addresses
+
+---
+
+#### **🎯 STEP 4: Basic Wallet State - READ OPERATIONS**
+**Status**: ⏸️ WAITING FOR STEP 3
+**Goal**: Create wallet state management (balance = 0 for now)
+
+1. **Tasks**:
+   - [ ] Create basic WalletState interface
+   - [ ] Implement `getState()` with dummy data
+   - [ ] Test: State persists between calls
+   - [ ] Add: Basic balance tracking (starts at 0)
+
+2. **Success Criteria**:
+   - `wallet.getState()` returns {balance: 0n, coins: [], transactions: []...}
+   - State is consistent
+   - No memory leaks
+
+---
+
+#### **🎯 STEP 5: Transaction Building - WRITE OPERATIONS**
+**Status**: ⏸️ WAITING FOR STEP 4
+**Goal**: Create and sign transactions (even if we can't broadcast yet)
+
+1. **Tasks**:
+   - [ ] Research: Midnight transaction structure
+   - [ ] Find: WASM functions for transaction building
+   - [ ] Implement: `createTransferTransaction(to, amount)`
+   - [ ] Test: Transaction is properly formatted
+
+---
+
+#### **🎯 STEP 6: Mobile API Integration**
+**Status**: ⏸️ WAITING FOR STEP 5
+**Goal**: Clean up the mobile interface
+
+1. **Tasks**:
+   - [ ] Implement complete MidnightMobileWallet class
+   - [ ] Add proper TypeScript interfaces
+   - [ ] Test all functions from React Native component
+   - [ ] Add comprehensive error handling
+
+### **Current Blocker Resolution**
+**PROBLEM**: SecretKeys.fromSeed() test must pass first
+**ACTION**: Focus 100% on making this one function work
+**DEBUG STEPS**:
+1. Verify zswap WASM loads correctly
+2. Verify minimal glue code has SecretKeys class
+3. Verify SecretKeys.fromSeed method exists
+4. Test with known good seed value
+5. Check for any WASM binding errors
 
 ### **Deliverables**
 - `MidnightWallet.ts` - Core wallet class
@@ -211,12 +294,20 @@ Make the wallet production-ready with enterprise-grade security and UX.
 
 ---
 
-## 🔄 **Next Immediate Actions**
+## 🔄 **Next Immediate Actions - STEP 1 FOCUS**
 
-### **Priority 1: Choose Phase 1 Starting Point**
-- **Option A**: Test key generation functions first
-- **Option B**: Test transaction building first  
-- **Option C**: Build API wrapper structure first
+### **🚨 CURRENT PRIORITY: Make SecretKeys.fromSeed() Work**
+
+**Immediate Tasks (in order)**:
+1. **Test Current Implementation**: Run the app and see if SecretKeys.fromSeed() test passes
+2. **Debug WASM Loading**: If it fails, check WASM instantiation logs
+3. **Debug Glue Code**: Verify minimal glue code has correct SecretKeys class
+4. **Debug Method Call**: Ensure fromSeed method can be called without errors
+5. **Validate Results**: Confirm returned SecretKeys object is valid
+
+**Success Definition**: 
+- Console shows: "🎉 SUCCESS! SecretKeys.fromSeed() works - wallet building ready!"
+- No errors or crashes
 
 ### **Priority 2: Set Up Development Workflow**
 - [ ] Create proper git branch strategy
@@ -231,8 +322,8 @@ Make the wallet production-ready with enterprise-grade security and UX.
 
 ---
 
-**Current Status**: Phase 0 Complete ✅  
-**Next Milestone**: Phase 1 - Core Wallet Functions
-**Estimated Timeline**: Phase 1 (2-3 weeks), Phase 2 (3-4 weeks), Phase 3 (2-3 weeks), Phase 4 (4-6 weeks)
+**Current Status**: Phase 0 Complete ✅ → Phase 1 Step 1 IN PROGRESS 🔄  
+**Next Milestone**: SecretKeys.fromSeed() working (Step 1 complete)
+**Estimated Timeline**: Step 1 (1-2 days), Step 2 (1 day), Step 3 (1 day), Step 4 (2 days), Step 5 (3-4 days), Step 6 (2-3 days)
 
 **Total Estimated Timeline**: ~3-4 months to production-ready wallet
