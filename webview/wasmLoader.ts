@@ -79,7 +79,32 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
             const wasmExportCount = Object.keys(wasmModule.instance.exports).length;
             const jsExportCount = Object.keys(exports).length;
             
-            result.message = '🎉 MIDNIGHT WASM SUCCESS! WASM: ' + wasmExportCount + ' exports, JS: ' + jsExportCount + ' exports, Size: ' + (wasmBytes.length / 1024 / 1024).toFixed(1) + 'MB';
+            // Test key generation functions
+            const availableFunctions = Object.keys(exports).filter(name => 
+                name.includes('key') || name.includes('Key') || name.includes('generate') || name.includes('wallet')
+            );
+            
+            console.log('Available key-related functions:', availableFunctions);
+            
+            // Test key generation
+            try {
+                console.log('Testing sampleSigningKey...');
+                const signingKey = exports.sampleSigningKey();
+                console.log('Signing key generated:', typeof signingKey);
+                
+                if (signingKey && exports.signatureVerifyingKey) {
+                    console.log('Testing signatureVerifyingKey...');
+                    const verifyingKey = exports.signatureVerifyingKey(signingKey);
+                    console.log('Verifying key generated:', typeof verifyingKey);
+                    
+                    result.message = '🎉 KEY GENERATION SUCCESS! Generated signing key and verifying key. Functions work: ' + availableFunctions.slice(0, 3).join(', ');
+                } else {
+                    result.message = '🎉 WASM LOADED! Functions found: ' + availableFunctions.slice(0, 5).join(', ');
+                }
+            } catch (keyError) {
+                console.error('Key generation error:', keyError);
+                result.message = '🎉 WASM LOADED! Key test failed: ' + keyError.message + ' | Functions: ' + availableFunctions.slice(0, 3).join(', ');
+            }
         } catch (evalError) {
             // Find remaining export statements
             const remainingExports = transformedJsCode.match(/export [^;]*/g);
