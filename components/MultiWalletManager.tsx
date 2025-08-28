@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Button, StyleSheet, ScrollView, Alert, TextInput } from 'react-native';
+import { View, Text, Button, StyleSheet, ScrollView, Alert, TextInput, Clipboard } from 'react-native';
 import { walletManager, WalletStore, StoredWallet, WalletThemes } from '../lib/walletManager';
 import { NetworkType, connectWalletToNetwork, getWalletBalance, ConnectedWallet } from '../lib/networkConnection';
+import { generateWalletAddresses, MidnightAddress } from '../lib/addressGeneration';
 
 /**
  * Multi-Wallet Manager Component
@@ -25,7 +26,10 @@ interface WalletBalance {
 export default function MultiWalletManager() {
   const [store, setStore] = useState<WalletStore | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentView, setCurrentView] = useState<'overview' | 'create' | 'import' | 'settings'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'create' | 'import' | 'receive'>('overview');
+  
+  // Receive address management
+  const [showReceiveFor, setShowReceiveFor] = useState<string | null>(null);
   
   // Balance management
   const [walletBalances, setWalletBalances] = useState<Record<string, WalletBalance>>({});
@@ -143,6 +147,23 @@ export default function MultiWalletManager() {
     return walletBalances[walletId] || null;
   };
 
+  /**
+   * Show receive address for a wallet
+   */
+  const handleShowReceive = (wallet: StoredWallet) => {
+    console.log(`📥 Showing receive address for wallet: ${wallet.metadata.name}`);
+    setShowReceiveFor(wallet.metadata.id);
+    setCurrentView('receive');
+  };
+
+  /**
+   * Hide receive address view
+   */
+  const handleHideReceive = () => {
+    setShowReceiveFor(null);
+    setCurrentView('overview');
+  };
+
   const handleCreateWallet = async () => {
     if (!newWalletName.trim()) {
       Alert.alert('Error', 'Please enter a wallet name');
@@ -250,7 +271,7 @@ export default function MultiWalletManager() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loadingText}>Loading wallets...</Text>
+        <Text style={styles.overviewLoadingText}>Loading wallets...</Text>
       </View>
     );
   }
@@ -355,6 +376,11 @@ export default function MultiWalletManager() {
                     onPress={() => fetchWalletBalance(wallet)}
                     color="#34C759"
                     disabled={getWalletBalanceInfo(wallet.metadata.id)?.isLoading || false}
+                  />
+                  <Button
+                    title="📥 Receive"
+                    onPress={() => handleShowReceive(wallet)}
+                    color="#FF9500"
                   />
                   <Button
                     title="Delete"
@@ -541,7 +567,223 @@ export default function MultiWalletManager() {
     );
   }
 
+  // Receive address view
+  if (currentView === 'receive') {
+    const wallet = store?.wallets.find(w => w.metadata.id === showReceiveFor);
+    
+    if (!wallet) {
+      return (
+        <View style={styles.container}>
+          <Text style={styles.errorText}>Wallet not found</Text>
+          <Button title="Back" onPress={handleHideReceive} color="#666" />
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>📥 Receive DUST Tokens</Text>
+          <Text style={styles.subtitle}>
+            Share these addresses to receive DUST tokens in {wallet.metadata.name}
+          </Text>
+        </View>
+
+        <ReceiveAddressDisplay wallet={wallet} />
+        
+        <View style={styles.formActions}>
+          <Button
+            title="← Back to Wallets"
+            onPress={handleHideReceive}
+            color="#666"
+          />
+        </View>
+      </ScrollView>
+    );
+  }
+
   return null;
+}
+
+/**
+ * Component to display wallet addresses for receiving tokens
+ */
+function ReceiveAddressDisplay({ wallet }: { wallet: StoredWallet }) {
+  const [addresses, setAddresses] = useState<MidnightAddress[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    generateAddresses();
+  }, [wallet]);
+
+  const generateAddresses = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log(`📥 Generating addresses for wallet: ${wallet.metadata.name}`);
+      
+      // Generate addresses for the wallet's network
+      const networkType = wallet.metadata.network === 'testnet' ? 'TestNet' : 
+                         wallet.metadata.network === 'undeployed' ? 'Undeployed' :
+                         wallet.metadata.network === 'mainnet' ? 'MainNet' : 'TestNet';
+      
+      const walletAddresses = await generateWalletAddresses(wallet.wallet.keyPairs, networkType);
+      setAddresses(walletAddresses);
+      
+      console.log(`   ✅ Generated ${walletAddresses.length} addresses`);
+      
+    } catch (error) {
+      console.error('   ❌ Failed to generate addresses:', error);
+      setError(String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const copyToClipboard = (address: string, role: string) => {
+    Clipboard.setString(address);
+    Alert.alert('Copied!', `${role} address copied to clipboard`);
+    console.log(`📋 Copied address to clipboard: ${address.substring(0, 20)}...`);
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Generating addresses...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Failed to generate addresses</Text>
+        <Text style={styles.errorDetail}>{error}</Text>
+        <Button title="Retry" onPress={generateAddresses} color="#007AFF" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.addressContainer}>
+      <Text style={styles.sectionTitle}>Receive Addresses:</Text>
+      <Text style={styles.addressInfo}>
+        Your wallet has 5 different addresses for different token types. For most users, the DUST address is recommended for receiving tokens.
+      </Text>
+      
+      {addresses.map((addr, index) => {
+        // Map role names to user-friendly names with descriptions
+        const getRoleInfo = (keyPair: any, index: number) => {
+          const roleName = keyPair.role || `Role ${index + 1}`;
+          
+          switch (roleName) {
+            case 'NightExternal':
+              return { 
+                name: '🌙 Night Token (External)', 
+                description: 'Main value token - Share with senders',
+                priority: 'high',
+                recommended: true 
+              };
+            case 'Dust':
+              return { 
+                name: '💨 DUST Token', 
+                description: 'Network fees - Most commonly used',
+                priority: 'high',
+                recommended: true 
+              };
+            case 'NightInternal':
+              return { 
+                name: '🔄 Night Token (Internal)', 
+                description: 'Change/internal transactions',
+                priority: 'low',
+                recommended: false 
+              };
+            case 'Zswap':
+              return { 
+                name: '🔀 Zswap Protocol', 
+                description: 'Shielded token swaps',
+                priority: 'low',
+                recommended: false 
+              };
+            case 'Metadata':
+              return { 
+                name: '📝 Metadata', 
+                description: 'Signing operations',
+                priority: 'low',
+                recommended: false 
+              };
+            default:
+              return { 
+                name: roleName, 
+                description: 'Unknown role',
+                priority: 'low',
+                recommended: false 
+              };
+          }
+        };
+        
+        const roleInfo = getRoleInfo(wallet.wallet.keyPairs[index], index);
+        
+        return (
+          <View key={addr.address} style={[
+            styles.addressCard,
+            roleInfo.recommended && styles.recommendedAddressCard
+          ]}>
+            <View style={styles.addressHeader}>
+              <View style={styles.roleNameContainer}>
+                <Text style={styles.addressRole}>{roleInfo.name}</Text>
+                {roleInfo.recommended && (
+                  <Text style={styles.recommendedBadge}>RECOMMENDED</Text>
+                )}
+              </View>
+              <Text style={styles.addressNetwork}>{addr.network}</Text>
+            </View>
+            
+            <Text style={styles.roleDescription}>{roleInfo.description}</Text>
+            
+            <View style={styles.addressContent}>
+              <Text style={styles.addressText} numberOfLines={2}>
+                {addr.address}
+              </Text>
+              
+              <View style={styles.addressActions}>
+                <Button
+                  title="📋 Copy"
+                  onPress={() => copyToClipboard(addr.address, roleInfo.name)}
+                  color={roleInfo.recommended ? "#007AFF" : "#34C759"}
+                />
+              </View>
+            </View>
+            
+            <Text style={styles.addressDetails}>
+              Coin Key: {addr.coinPublicKey.substring(0, 16)}...
+            </Text>
+            <Text style={styles.addressDetails}>
+              Enc Key: {addr.encryptionPublicKey.substring(0, 16)}...
+            </Text>
+          </View>
+        );
+      })}
+      
+      <View style={styles.receiveInfo}>
+        <Text style={styles.receiveInfoTitle}>ℹ️ Which Address Should I Share?</Text>
+        <Text style={styles.receiveInfoText}>
+          • 💨 <Text style={styles.boldText}>DUST Token</Text> - For network fees (most common)
+        </Text>
+        <Text style={styles.receiveInfoText}>
+          • 🌙 <Text style={styles.boldText}>Night Token</Text> - For main value transfers
+        </Text>
+        <Text style={styles.receiveInfoText}>
+          • 🔄 Internal, 🔀 Zswap, 📝 Metadata - Advanced protocol use
+        </Text>
+        <Text style={styles.receiveInfoText}>
+          • All addresses belong to this wallet ({wallet.metadata.network})
+        </Text>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -550,7 +792,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     padding: 20,
   },
-  loadingText: {
+  overviewLoadingText: {
     textAlign: 'center',
     fontSize: 16,
     marginTop: 50,
@@ -747,5 +989,135 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginTop: 20,
+  },
+  loadingContainer: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#ffebee',
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  errorDetail: {
+    fontSize: 12,
+    color: '#c62828',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  addressContainer: {
+    padding: 20,
+  },
+  addressInfo: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  addressCard: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  recommendedAddressCard: {
+    borderColor: '#007AFF',
+    borderWidth: 2,
+    backgroundColor: '#f0f8ff',
+  },
+  addressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  roleNameContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  addressRole: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginRight: 8,
+  },
+  recommendedBadge: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    textAlign: 'center',
+  },
+  roleDescription: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  addressNetwork: {
+    fontSize: 12,
+    color: '#666',
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  addressContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  addressText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: '#333',
+    backgroundColor: '#f8f8f8',
+    padding: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  addressActions: {
+    minWidth: 60,
+  },
+  addressDetails: {
+    fontSize: 10,
+    color: '#999',
+    fontFamily: 'monospace',
+    marginBottom: 2,
+  },
+  receiveInfo: {
+    backgroundColor: '#e3f2fd',
+    padding: 15,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  receiveInfoTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1976d2',
+    marginBottom: 8,
+  },
+  receiveInfoText: {
+    fontSize: 12,
+    color: '#1565c0',
+    marginBottom: 4,
+  },
+  boldText: {
+    fontWeight: 'bold',
   },
 });
