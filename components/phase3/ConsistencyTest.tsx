@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Button, StyleSheet } from 'react-native';
+import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 import { testWalletConsistency, MidnightWallet } from '../../lib/midnightWallet';
 
 interface Props {

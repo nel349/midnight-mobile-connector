@@ -1,10 +1,10 @@
 import { StyleSheet, SafeAreaView } from 'react-native';
-import Step1_BasicCrypto from '@/components/Step1_BasicCrypto';
+import WalletBuilder from '@/components/WalletBuilder';
 
-export default function HomeScreen() {
+export default function WalletBuilderScreen() {
   return (
     <SafeAreaView style={styles.container}>
-      <Step1_BasicCrypto />
+      <WalletBuilder />
     </SafeAreaView>
   );
 }
