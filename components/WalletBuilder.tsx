@@ -4,6 +4,7 @@ import Step1_BasicCrypto from './Step1_BasicCrypto';
 import Step2_SeedDerivation from './Step2_SeedDerivation';
 import Step3_KeyDerivation from './Step3_KeyDerivation';
 import Step4_AddressGeneration from './Step4_AddressGeneration';
+import Step5_NetworkIntegration from './Step5_NetworkIntegration';
 import { MidnightWallet } from '../lib/midnightWallet';
 
 /**
@@ -48,7 +49,7 @@ export default function WalletBuilder() {
               <Text style={styles.statusText}>✅ Phase 2: Seed Derivation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 3: Key Derivation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 4: Address Generation COMPLETE</Text>
-              <Text style={styles.statusText}>⏳ Phase 5: Network Integration PENDING</Text>
+              <Text style={styles.statusText}>✅ Phase 5: Network Integration COMPLETE</Text>
             </View>
           </View>
         );
@@ -102,14 +103,9 @@ export default function WalletBuilder() {
           <View style={styles.phaseContent}>
             <Text style={styles.phaseTitle}>🌐 Phase 5: Network Integration</Text>
             <Text style={styles.phaseDescription}>
-              Connect to Midnight testnet and query balances
+              Connect wallet to TestNet-02 and local development networks
             </Text>
-            <View style={styles.comingSoon}>
-              <Text style={styles.comingSoonText}>🚧 Coming Soon</Text>
-              <Text style={styles.comingSoonDetail}>
-                Full network integration with indexer, node, and proof server
-              </Text>
-            </View>
+            <Step5_NetworkIntegration wallet={wallet} />
           </View>
         );
 
