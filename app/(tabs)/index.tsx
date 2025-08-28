@@ -1,10 +1,10 @@
 import { StyleSheet, SafeAreaView } from 'react-native';
-import MidnightWasmLoader from '@/components/MidnightWasmLoader';
+import Step1_BasicCrypto from '@/components/Step1_BasicCrypto';
 
 export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
-      <MidnightWasmLoader />
+      <Step1_BasicCrypto />
     </SafeAreaView>
   );
 }

@@ -5,6 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { setupCrypto } from '@/lib/cryptoSetup';
+
+// Setup crypto polyfill globally at app startup
+setupCrypto();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();

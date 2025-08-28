@@ -190,6 +190,9 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                 console.log('STEP 19c: SecretKeys.fromSeed exists?', !!exports.SecretKeys.fromSeed);
                 console.log('STEP 19d: SecretKeys.fromSeed type:', typeof exports.SecretKeys.fromSeed);
                 
+                // DEBUG: Lets find out WHY Expected 32-byte seed happens
+                console.log('STEP 19e: Lets debug the REAL reason for the failure...');
+                
                 if (exports.SecretKeys.fromSeed) {
                     // FIRST: Try the constructor without seed - this might work!
                     console.log('STEP 20c: Trying SecretKeys constructor (no seed)...');
@@ -204,30 +207,18 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                         console.log('STEP 20c ERROR: SecretKeys constructor failed:', constructorError);
                     }
                     
-                    // Generate proper entropy - Common patterns for crypto seeds
-                    const cryptoSeed32 = new Uint8Array(32);
-                    const cryptoSeed64 = new Uint8Array(64);  // Some systems use 64 bytes (512 bits)
+                    // DISCOVERY: From midnight-bank/bank-api/src/test/commons.ts - seeds are HEX STRINGS!
+                    // export const GENESIS_MINT_WALLET_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
+                    // WalletBuilder.buildFromSeed(indexer, indexerWS, proofServer, node, seed, ...)
                     
-                    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-                        crypto.getRandomValues(cryptoSeed32);
-                        crypto.getRandomValues(cryptoSeed64);
-                    } else {
-                        // Fallback: use Math.random for testing
-                        for (let i = 0; i < 32; i++) {
-                            cryptoSeed32[i] = Math.floor(Math.random() * 256);
-                        }
-                        for (let i = 0; i < 64; i++) {
-                            cryptoSeed64[i] = Math.floor(Math.random() * 256);
-                        }
-                    }
-                    
-                    // Test known entropy patterns that work with many crypto libraries
+                    // Test with known working seed formats from Midnight codebase
                     const seedFormats = [
-                        cryptoSeed32,  // 32 bytes crypto random
-                        cryptoSeed64,  // 64 bytes crypto random  
-                        new Uint8Array(32).fill(1),  // All ones (sometimes works as test seed)
-                        // BIP39-style: 128 bits entropy (16 bytes) padded to 32
-                        new Uint8Array([...new Uint8Array(16).map(() => Math.floor(Math.random() * 256)), ...new Array(16).fill(0)]),
+                        '0000000000000000000000000000000000000000000000000000000000000001', // Genesis mint wallet seed
+                        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', // Test vector hex string
+                        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', // All F's
+                        '1111111111111111111111111111111111111111111111111111111111111111', // All 1's
+                        'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef', // Known pattern
+                        '0101010101010101010101010101010101010101010101010101010101010101', // Alternating pattern
                     ];
                     
                     for (let i = 0; i < seedFormats.length; i++) {
@@ -235,7 +226,23 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                         console.log('STEP 20a.' + i + ': Trying seed format', i + ':', typeof testSeed, testSeed instanceof Uint8Array ? 'Uint8Array[' + testSeed.length + ']' : testSeed.toString().substring(0, 16) + '...');
                         
                                                 try {
-                            const wasmResult = exports.wasm.secretkeys_fromSeed(testSeed);
+                            // Convert hex string to bytes for WASM call
+                            let seedBytes;
+                            if (typeof testSeed === 'string') {
+                                // Hex string to Uint8Array conversion
+                                const cleanHex = testSeed.startsWith('0x') ? testSeed.slice(2) : testSeed;
+                                if (cleanHex.length !== 64) {
+                                    console.log('STEP 20a.' + i + 'skip: Invalid hex length:', cleanHex.length, 'expected 64');
+                                    continue;
+                                }
+                                seedBytes = new Uint8Array(cleanHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                            } else {
+                                seedBytes = testSeed;
+                            }
+                            
+                            console.log('STEP 20a.' + i + 'bytes: Converted to bytes:', seedBytes.length, Array.from(seedBytes.slice(0, 8)));
+                            
+                            const wasmResult = exports.wasm.secretkeys_fromSeed(seedBytes);
                             console.log('STEP 20a.' + i + 'r: WASM result:', wasmResult);
 
                             if (wasmResult[2] === 0) {  // Success!
@@ -243,7 +250,7 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                                 
                                 // Now test the full SecretKeys.fromSeed()
                                 try {
-                                    const secretKeys = exports.SecretKeys.fromSeed(testSeed);
+                                    const secretKeys = exports.SecretKeys.fromSeed(seedBytes);
                                     console.log('STEP 20SUCCESS: ✅ SecretKeys.fromSeed() succeeded!', typeof secretKeys);
                                     console.log('STEP 20SUCCESS: secretKeys has __wbg_ptr?', !!secretKeys.__wbg_ptr);
                                     result.success = true;
@@ -293,6 +300,71 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                                 console.log('STEP 20a3.8: Direct malloc FAILED:', mallocError);
                                 console.log('STEP 20a3.9: malloc error type:', typeof mallocError);
                                 console.log('STEP 20a3.10: malloc error message:', mallocError.message);
+                            }
+                        }
+                        
+                        // SYSTEMATIC DEBUGGING: Why does Expected 32-byte seed happen?
+                        console.log('STEP 20a4.debug: Systematic debugging of the 32-byte seed issue...');
+                        
+                        if (exports.wasm && exports.wasm.secretkeys_fromSeed) {
+                            const testSeed = seedFormats[0]; // Our 32-byte test vector
+                            
+                            // Test 1: Different parameter orders
+                            console.log('STEP 20a4.debug1: Testing different parameter orders...');
+                            try {
+                                console.log('STEP 20a4.debug1a: Trying (32, ptr) instead of (ptr, 32)...');
+                                const ptr1 = 747110; // Use our known working memory location
+                                const memory = new Uint8Array(exports.wasm.memory.buffer);
+                                memory.set(testSeed, ptr1);
+                                const result1 = exports.wasm.secretkeys_fromSeed(32, ptr1); // Length first
+                                console.log('STEP 20a4.debug1a result:', result1);
+                            } catch (err1) {
+                                console.log('STEP 20a4.debug1a error:', err1.message);
+                            }
+                            
+                            // Test 2: Pass Uint8Array directly (no memory allocation)
+                            console.log('STEP 20a4.debug2: Testing direct Uint8Array passing...');
+                            try {
+                                const result2 = exports.wasm.secretkeys_fromSeed(testSeed);
+                                console.log('STEP 20a4.debug2 result:', result2);
+                            } catch (err2) {
+                                console.log('STEP 20a4.debug2 error:', err2.message);
+                            }
+                            
+                            // Test 3: Different memory alignments
+                            console.log('STEP 20a4.debug3: Testing memory alignment...');
+                            const alignments = [100000, 100008, 100016, 100032]; // Different alignments
+                            for (const alignedPtr of alignments) {
+                                try {
+                                    const memory = new Uint8Array(exports.wasm.memory.buffer);
+                                    memory.set(testSeed, alignedPtr);
+                                    const result3 = exports.wasm.secretkeys_fromSeed(alignedPtr, 32);
+                                    console.log('STEP 20a4.debug3 ptr', alignedPtr, 'result:', result3);
+                                } catch (err3) {
+                                    console.log('STEP 20a4.debug3 ptr', alignedPtr, 'error:', err3.message);
+                                }
+                            }
+                            
+                            // Test 4: Check what WASM actually reads from our memory
+                            console.log('STEP 20a4.debug4: Verifying what WASM reads from memory...');
+                            const debugPtr = 200000;
+                            const memory = new Uint8Array(exports.wasm.memory.buffer);
+                            
+                            // Write known pattern
+                            const knownPattern = new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+                            for (let i = 0; i < 32; i++) {
+                                memory[debugPtr + i] = (i % 8) + 1; // Pattern: 1,2,3,4,5,6,7,8,1,2,3...
+                            }
+                            
+                            console.log('STEP 20a4.debug4a: Written pattern to memory at', debugPtr);
+                            console.log('STEP 20a4.debug4b: First 8 bytes we wrote:', Array.from(memory.subarray(debugPtr, debugPtr + 8)));
+                            console.log('STEP 20a4.debug4c: Last 8 bytes we wrote:', Array.from(memory.subarray(debugPtr + 24, debugPtr + 32)));
+                            
+                            try {
+                                const result4 = exports.wasm.secretkeys_fromSeed(debugPtr, 32);
+                                console.log('STEP 20a4.debug4d: WASM result:', result4);
+                            } catch (err4) {
+                                console.log('STEP 20a4.debug4d: WASM error:', err4.message);
                             }
                         }
                         
@@ -394,8 +466,9 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                             }
                         }
                         
-                        console.log('STEP 20b: Now calling SecretKeys.fromSeed...');
-                        const secretKeys = exports.SecretKeys.fromSeed(testSeed);
+                        console.log('STEP 20b: Now calling SecretKeys.fromSeed with hex string...');
+                        // Use the original hex string - our updated SecretKeys.fromSeed handles the conversion
+                        const secretKeys = exports.SecretKeys.fromSeed(seedFormats[0]); // Genesis mint wallet seed
                         console.log('STEP 20c: SecretKeys.fromSeed returned:', typeof secretKeys);
                         console.log('STEP 20d: SecretKeys result is truthy?', !!secretKeys);
                         
