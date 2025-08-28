@@ -92,9 +92,37 @@ const createWebCryptoPolyfill = () => {
     throw new Error(`Unsupported algorithm: ${algorithm.name}`);
   };
 
+  // Production SHA-256 digest using crypto-js
+  const digest = async (algorithm: string, data: Uint8Array): Promise<ArrayBuffer> => {
+    if (algorithm !== 'SHA-256') {
+      throw new Error(`Unsupported digest algorithm: ${algorithm}`);
+    }
+    
+    const CryptoJS = require('crypto-js');
+    
+    // Convert Uint8Array to crypto-js WordArray
+    const wordArray = CryptoJS.lib.WordArray.create(data);
+    
+    // Compute SHA-256 hash
+    const hash = CryptoJS.SHA256(wordArray);
+    
+    // Convert hash to Uint8Array
+    const hashBytes = new Uint8Array(32);
+    for (let i = 0; i < 8; i++) {
+      const word = hash.words[i];
+      hashBytes[i * 4] = (word >>> 24) & 0xff;
+      hashBytes[i * 4 + 1] = (word >>> 16) & 0xff;
+      hashBytes[i * 4 + 2] = (word >>> 8) & 0xff;
+      hashBytes[i * 4 + 3] = word & 0xff;
+    }
+    
+    return hashBytes.buffer;
+  };
+
   return {
     generateKey,
     exportKey,
+    digest,
     // Add other methods as needed for PBKDF2, etc.
   };
 };

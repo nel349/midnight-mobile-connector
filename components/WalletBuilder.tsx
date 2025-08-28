@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Button, StyleSheet, ScrollView } from 'react-native';
 import Step1_BasicCrypto from './Step1_BasicCrypto';
 import Step2_SeedDerivation from './Step2_SeedDerivation';
+import Step3_KeyDerivation from './Step3_KeyDerivation';
 
 /**
  * Midnight Wallet Builder - Following MIDNIGHT_MOBILE_PLAN.md
@@ -42,8 +43,8 @@ export default function WalletBuilder() {
               <Text style={styles.statusTitle}>Current Status:</Text>
               <Text style={styles.statusText}>✅ Phase 1: Foundation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 2: Seed Derivation COMPLETE</Text>
-              <Text style={styles.statusText}>🔄 Phase 3: Key Derivation IN PROGRESS</Text>
-              <Text style={styles.statusText}>⏳ Phase 4: Address Generation PENDING</Text>
+              <Text style={styles.statusText}>✅ Phase 3: Key Derivation COMPLETE</Text>
+              <Text style={styles.statusText}>🔄 Phase 4: Address Generation IN PROGRESS</Text>
               <Text style={styles.statusText}>⏳ Phase 5: Network Integration PENDING</Text>
             </View>
           </View>
@@ -78,12 +79,7 @@ export default function WalletBuilder() {
             <Text style={styles.phaseDescription}>
               HKDF key derivation and deterministic key generation
             </Text>
-            <View style={styles.comingSoon}>
-              <Text style={styles.comingSoonText}>🚧 Coming Soon</Text>
-              <Text style={styles.comingSoonDetail}>
-                Integration of HD wallet keys with Web Crypto API for deterministic Ed25519/X25519 keys
-              </Text>
-            </View>
+            <Step3_KeyDerivation />
           </View>
         );
 
