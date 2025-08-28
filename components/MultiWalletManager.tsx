@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Button, StyleSheet, ScrollView, Alert, TextInput } from 'react-native';
 import { walletManager, WalletStore, StoredWallet, WalletThemes } from '../lib/walletManager';
-import { NetworkType } from '../lib/networkConnection';
+import { NetworkType, connectWalletToNetwork, getWalletBalance, ConnectedWallet } from '../lib/networkConnection';
 
 /**
  * Multi-Wallet Manager Component
@@ -10,10 +10,25 @@ import { NetworkType } from '../lib/networkConnection';
  * and managing up to 5 Midnight wallets with secure storage.
  */
 
+interface WalletBalance {
+  walletId: string;
+  balance: {
+    dust: string;
+    totalCoins: number;
+    networkEndpoint: string;
+    lastUpdated: Date;
+    error?: string;
+  } | null;
+  isLoading: boolean;
+}
+
 export default function MultiWalletManager() {
   const [store, setStore] = useState<WalletStore | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentView, setCurrentView] = useState<'overview' | 'create' | 'import' | 'settings'>('overview');
+  
+  // Balance management
+  const [walletBalances, setWalletBalances] = useState<Record<string, WalletBalance>>({});
   
   // Create wallet form
   const [newWalletName, setNewWalletName] = useState('');
@@ -41,6 +56,91 @@ export default function MultiWalletManager() {
 
   const refreshStore = () => {
     setStore(walletManager.getStore());
+  };
+
+  /**
+   * Fetch balance for a specific wallet
+   */
+  const fetchWalletBalance = async (wallet: StoredWallet) => {
+    const walletId = wallet.metadata.id;
+    console.log(`💰 Fetching balance for wallet: ${wallet.metadata.name}`);
+
+    // Set loading state
+    setWalletBalances(prev => ({
+      ...prev,
+      [walletId]: {
+        walletId,
+        balance: prev[walletId]?.balance || null,
+        isLoading: true
+      }
+    }));
+
+    try {
+      // Connect wallet to network
+      console.log(`   🔗 Connecting to ${wallet.metadata.network} network...`);
+      const connectedWallet = await connectWalletToNetwork(wallet.wallet, wallet.metadata.network);
+      
+      // Fetch balance
+      console.log(`   💰 Fetching balance...`);
+      const balance = await getWalletBalance(connectedWallet);
+      
+      // Update balance state
+      setWalletBalances(prev => ({
+        ...prev,
+        [walletId]: {
+          walletId,
+          balance,
+          isLoading: false
+        }
+      }));
+
+      console.log(`   ✅ Balance fetched: ${balance.dust} tDUST`);
+
+    } catch (error) {
+      console.error(`   ❌ Failed to fetch balance for ${wallet.metadata.name}:`, error);
+      
+      // Set error state
+      setWalletBalances(prev => ({
+        ...prev,
+        [walletId]: {
+          walletId,
+          balance: {
+            dust: '0.000000',
+            totalCoins: 0,
+            networkEndpoint: 'error',
+            lastUpdated: new Date(),
+            error: String(error)
+          },
+          isLoading: false
+        }
+      }));
+    }
+  };
+
+  /**
+   * Fetch balances for all wallets
+   */
+  const fetchAllBalances = async () => {
+    if (!store) return;
+    
+    console.log('💰 Fetching balances for all wallets...');
+    
+    // Fetch balances for all wallets in parallel
+    const fetchPromises = store.wallets.map(wallet => fetchWalletBalance(wallet));
+    
+    try {
+      await Promise.allSettled(fetchPromises);
+      console.log('   ✅ All balance fetches completed');
+    } catch (error) {
+      console.error('   ❌ Error in batch balance fetch:', error);
+    }
+  };
+
+  /**
+   * Get balance info for a wallet
+   */
+  const getWalletBalanceInfo = (walletId: string): WalletBalance | null => {
+    return walletBalances[walletId] || null;
   };
 
   const handleCreateWallet = async () => {
@@ -205,6 +305,40 @@ export default function MultiWalletManager() {
                     <Text style={styles.walletKeys}>
                       Keys: {wallet.wallet.keyPairs.length} roles
                     </Text>
+                    
+                    {/* Balance Display */}
+                    {(() => {
+                      const balanceInfo = getWalletBalanceInfo(wallet.metadata.id);
+                      
+                      if (!balanceInfo) {
+                        return (
+                          <Text style={styles.balanceNotChecked}>Balance: Not checked</Text>
+                        );
+                      }
+                      
+                      if (balanceInfo.isLoading) {
+                        return (
+                          <Text style={styles.balanceLoading}>Balance: Loading...</Text>
+                        );
+                      }
+                      
+                      if (balanceInfo.balance?.error) {
+                        return (
+                          <Text style={styles.balanceError}>Balance: Error</Text>
+                        );
+                      }
+                      
+                      return (
+                        <View style={styles.balanceContainer}>
+                          <Text style={styles.balanceAmount}>
+                            💰 {balanceInfo.balance?.dust || '0.000000'} tDUST
+                          </Text>
+                          <Text style={styles.balanceDetails}>
+                            {balanceInfo.balance?.totalCoins || 0} coins • Updated: {balanceInfo.balance?.lastUpdated.toLocaleTimeString()}
+                          </Text>
+                        </View>
+                      );
+                    })()}
                   </View>
                 </View>
                 
@@ -217,6 +351,12 @@ export default function MultiWalletManager() {
                     />
                   )}
                   <Button
+                    title="💰 Balance"
+                    onPress={() => fetchWalletBalance(wallet)}
+                    color="#34C759"
+                    disabled={getWalletBalanceInfo(wallet.metadata.id)?.isLoading || false}
+                  />
+                  <Button
                     title="Delete"
                     onPress={() => handleDeleteWallet(wallet)}
                     color="#FF3B30"
@@ -227,7 +367,19 @@ export default function MultiWalletManager() {
           )}
         </View>
 
-        {/* Action Buttons */}
+        {/* Balance Actions */}
+        {store.wallets.length > 0 && (
+          <View style={styles.actionButtons}>
+            <Button
+              title="💰 Refresh All Balances"
+              onPress={fetchAllBalances}
+              color="#007AFF"
+              disabled={Object.values(walletBalances).some(b => b.isLoading)}
+            />
+          </View>
+        )}
+
+        {/* Wallet Actions */}
         <View style={styles.actionButtons}>
           {walletManager.canAddWallet() && (
             <>
@@ -500,9 +652,42 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 1,
   },
+  balanceContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  balanceAmount: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#34C759',
+  },
+  balanceDetails: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 2,
+  },
+  balanceNotChecked: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  balanceLoading: {
+    fontSize: 11,
+    color: '#007AFF',
+    marginTop: 4,
+  },
+  balanceError: {
+    fontSize: 11,
+    color: '#FF3B30',
+    marginTop: 4,
+  },
   walletActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginTop: 10,
   },
   actionButtons: {
     marginBottom: 25,
