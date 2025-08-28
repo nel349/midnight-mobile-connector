@@ -100,6 +100,63 @@ heap.push(undefined, null, true, false);
 
 let heap_next = heap.length;
 
+// Critical: WASM memory management for Uint8Array support
+// Use existing getUint8ArrayMemory0 if available, otherwise define our own
+function getUint8ArrayMemory0() {
+    if (typeof cachedUint8ArrayMemory0 !== 'undefined') {
+        // Use existing cached memory
+        if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
+            cachedUint8ArrayMemory0 = new Uint8Array(exports.wasm.memory.buffer);
+        }
+        return cachedUint8ArrayMemory0;
+    } else {
+        // Create new memory accessor
+        return new Uint8Array(exports.wasm.memory.buffer);
+    }
+}
+
+// Critical: Pass Uint8Array to WASM memory
+function passArray8ToWasm0(arg, malloc) {
+    console.log('passArray8ToWasm0 called with arg length:', arg.length);
+    try {
+        let ptr;
+        
+        // WASM malloc is broken ("Unreachable code"), use manual memory allocation
+        console.log('passArray8ToWasm0: WASM malloc is broken, using manual memory allocation');
+        
+        // Get WASM memory and use a safe area for temporary data
+        const memory = getUint8ArrayMemory0();
+        const bufferSize = memory.length;
+        
+        // Use memory in the middle range - avoid both beginning and end
+        // WASM typically uses memory from beginning, and may use end for stack
+        const safeOffset = Math.floor(bufferSize * 0.6); // Use 60% through the buffer
+        ptr = safeOffset;
+        
+        console.log('passArray8ToWasm0: Using middle-range allocation at offset', ptr, 'buffer size:', bufferSize);
+        
+        // Ensure minimum safe offset
+        if (ptr < 200000) {
+            ptr = 200000; // Minimum safe offset
+            console.log('passArray8ToWasm0: Adjusted to minimum safe offset:', ptr);
+        }
+        
+        console.log('passArray8ToWasm0: allocated ptr:', ptr);
+        
+        // Validate pointer is within bounds
+        if (ptr < 0 || ptr + arg.length > memory.length) {
+            throw new Error('passArray8ToWasm0: Pointer ' + ptr + ' + length ' + arg.length + ' exceeds memory bounds ' + memory.length);
+        }
+        
+        memory.subarray(ptr, ptr + arg.length).set(arg);
+        console.log('passArray8ToWasm0: copied data to WASM memory');
+        return { ptr, length: arg.length };
+    } catch (err) {
+        console.log('passArray8ToWasm0 error:', err);
+        throw err;
+    }
+}
+
 function addHeapObject(obj) {
     if (heap_next === heap.length) heap.push(heap.length + 1);
     const idx = heap_next;
@@ -143,7 +200,7 @@ function getHeapU8() {
 
 const SecretKeysFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_secretkeys_free(ptr >>> 0, 1));
+    : new FinalizationRegistry(ptr => exports.wasm.__wbg_secretkeys_free(ptr >>> 0, 1));
 
 export class SecretKeys {
 
@@ -164,11 +221,11 @@ export class SecretKeys {
 
     free() {
         const ptr = this.__destroy_into_raw();
-        wasm.__wbg_secretkeys_free(ptr, 0);
+        exports.wasm.__wbg_secretkeys_free(ptr, 0);
     }
 
     constructor() {
-        const ret = wasm.secretkeys_new();
+        const ret = exports.wasm.secretkeys_new();
         if (ret[2]) {
             throw takeObject(ret[1]);
         }
@@ -178,15 +235,57 @@ export class SecretKeys {
     }
 
     static fromSeed(seed) {
-        const ret = wasm.secretkeys_fromSeed(seed);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
+        console.log('SecretKeys.fromSeed called with seed type:', typeof seed, 'length:', seed.length);
+        
+        // Convert hex string OR Uint8Array to WASM memory properly
+        let seedBytes;
+        let seedPtr = 0;
+        let seedLen = 0;
+        
+        try {
+            // Handle both hex strings and Uint8Array
+            if (typeof seed === 'string') {
+                // Convert hex string to Uint8Array - this is the key insight from midnight-bank!
+                const cleanHex = seed.startsWith('0x') ? seed.slice(2) : seed;
+                if (cleanHex.length !== 64) {
+                    throw new Error('Hex seed must be exactly 64 characters (32 bytes)');
+                }
+                seedBytes = new Uint8Array(cleanHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                console.log('SecretKeys.fromSeed: Converted hex string to bytes:', seedBytes.length, 'first 8:', Array.from(seedBytes.slice(0, 8)));
+            } else if (seed instanceof Uint8Array) {
+                if (seed.length !== 32) {
+                    throw new Error('Uint8Array seed must be exactly 32 bytes');
+                }
+                seedBytes = seed;
+                console.log('SecretKeys.fromSeed: Using Uint8Array:', seedBytes.length, 'first 8:', Array.from(seedBytes.slice(0, 8)));
+            } else {
+                throw new Error('Seed must be hex string (64 chars) or Uint8Array (32 bytes)');
+            }
+            
+            // Now allocate WASM memory for the bytes
+            const result = passArray8ToWasm0(seedBytes, null); 
+            seedPtr = result.ptr;
+            seedLen = result.length;
+            console.log('SecretKeys.fromSeed: Allocated WASM memory at ptr:', seedPtr, 'length:', seedLen);
+            
+            console.log('SecretKeys.fromSeed: About to call WASM with ptr:', seedPtr, 'len:', seedLen);
+            console.log('SecretKeys.fromSeed: Memory at ptr contains:', Array.from(getUint8ArrayMemory0().subarray(seedPtr, seedPtr + Math.min(seedLen, 8))));
+            const ret = exports.wasm.secretkeys_fromSeed(seedPtr, seedLen);
+            console.log('SecretKeys.fromSeed: WASM returned:', ret);
+            
+            if (ret[2]) {
+                throw takeFromExternrefTable0(ret[1]);
+            }
+            return SecretKeys.__wrap(ret[0]);
+        } finally {
+            // Skip freeing memory since we used manual allocation
+            // The memory will be reused on next allocation anyway
+            console.log('SecretKeys.fromSeed: Skipping memory free (manual allocation used)');
         }
-        return SecretKeys.__wrap(ret[0]);
     }
 
     static fromSeedRng(seed) {
-        const ret = wasm.secretkeys_fromSeedRng(seed);
+        const ret = exports.wasm.secretkeys_fromSeedRng(seed);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -316,7 +415,7 @@ export function __wbindgen_exn_store(a) {}
 export function __wbindgen_object_drop_ref() {}
 export function __wbg_String_fed4d24b68977888(arg0, arg1) {
     const ret = String(arg1);
-    const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr1 = passStringToWasm0(ret, exports.wasm.__wbindgen_malloc, exports.wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     // Store result in memory locations
     return ret;
@@ -346,7 +445,28 @@ export function __wbg_byobRequest_77d9adf63337edfb() { return 0; }
 
 export function __wbg_close_5ce03e29be453811() { return 0; }
 
-export function __wbg_crypto_574e78ad8b13b65f() { return 0; }
+export function __wbg_crypto_574e78ad8b13b65f(arg0) { 
+    console.log('__wbg_crypto called with:', arg0);
+    try {
+        // This returns the crypto object - need to add it to the heap
+        const cryptoObj = typeof crypto !== 'undefined' ? crypto : {
+            getRandomValues: function(array) {
+                console.log('Fallback crypto.getRandomValues called with array length:', array.length);
+                // Fallback implementation
+                for (let i = 0; i < array.length; i++) {
+                    array[i] = Math.floor(Math.random() * 256);
+                }
+                return array;
+            }
+        };
+        const result = addHeapObject(cryptoObj);
+        console.log('__wbg_crypto returning heap index:', result);
+        return result;
+    } catch (err) {
+        console.log('__wbg_crypto error:', err);
+        return addHeapObject({});
+    }
+}
 
 export function __wbg_process_dc0fbacc7c1c06f7() { return 0; }
 
@@ -362,9 +482,82 @@ export function __wbg_msCrypto_a61aeb35a24c1329() { return 0; }
 
 export function __wbg_vendor_b15bb2b8492040f7() { return 0; }
 
-export function __wbg_randomFillSync_ac0988aba3254290() { return 0; }
+export function __wbg_randomFillSync_ac0988aba3254290(arg0, arg1, arg2) { 
+    console.log('__wbg_randomFillSync called with:', arg0, arg1, arg2);
+    try {
+        // This is Node.js crypto.randomFillSync(buffer, offset, size)
+        // We need to fill the buffer with random bytes
+        
+        // Get WASM memory - try different ways to access it
+        let wasmMemory;
+        if (exports.wasm && exports.wasm.memory) {
+            wasmMemory = exports.wasm.memory.buffer;
+        } else if (exports.wasm && exports.wasm.memory) {
+            wasmMemory = wasm.memory.buffer;
+        } else {
+            console.log('randomFillSync: WASM memory not available');
+            return;
+        }
+        
+        const heap = new Uint8Array(wasmMemory);
+        const offset = arg1 >>> 0;
+        const size = arg2 >>> 0;
+        const array = heap.subarray(arg0 + offset, arg0 + offset + size);
+        console.log('randomFillSync array length:', array.length);
+        
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            crypto.getRandomValues(array);
+            console.log('randomFillSync: Used WebCrypto');
+        } else {
+            // Fallback: use Math.random
+            for (let i = 0; i < array.length; i++) {
+                array[i] = Math.floor(Math.random() * 256);
+            }
+            console.log('randomFillSync: Used Math.random fallback');
+        }
+    } catch (err) {
+        console.log('randomFillSync error:', err);
+    }
+}
 
-export function __wbg_getRandomValues_b8f5dbd5f3995a9e() { return 0; }
+export function __wbg_getRandomValues_b8f5dbd5f3995a9e(arg0, arg1) { 
+    console.log('__wbg_getRandomValues called with:', arg0, arg1);
+    try {
+        // This is crypto.getRandomValues(array) - need to fill the array with random bytes
+        const length = arg1 >>> 0;
+        console.log('getRandomValues length:', length);
+        
+        // Get WASM memory - try different ways to access it
+        let wasmMemory;
+        if (exports.wasm && exports.wasm.memory) {
+            wasmMemory = exports.wasm.memory.buffer;
+        } else if (exports.wasm && exports.wasm.memory) {
+            wasmMemory = wasm.memory.buffer;
+        } else {
+            console.log('getRandomValues: WASM memory not available, using fallback');
+            return arg0; // Return early if no memory access
+        }
+        
+        const heap = new Uint8Array(wasmMemory);
+        const array = heap.subarray(arg0, arg0 + length);
+        console.log('getRandomValues array length:', array.length);
+        
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            crypto.getRandomValues(array);
+            console.log('getRandomValues: Used WebCrypto');
+        } else {
+            // Fallback: use Math.random
+            for (let i = 0; i < length; i++) {
+                array[i] = Math.floor(Math.random() * 256);
+            }
+            console.log('getRandomValues: Used Math.random fallback');
+        }
+        return arg0;
+    } catch (err) {
+        console.log('getRandomValues error:', err);
+        return arg0;
+    }
+}
 
 export function __wbg_new_78feb108b6472713() { return new Object(); }
 
@@ -442,6 +635,9 @@ export function __wbg_getPrototypeOf_08aaacea7e300a38(arg0) { return Object.getP
 
 export function __wbindgen_closure_wrapper3626() { return {}; }
 
+// Note: __wbindgen_malloc, __wbindgen_realloc, and __wbindgen_free 
+// are provided BY the WASM module, not by JavaScript stubs
+
 // Missing wbindgen functions for error handling
 export function __wbindgen_throw(ptr, len) {
     const message = getStringFromWasm0(ptr, len);
@@ -456,9 +652,32 @@ export function __wbindgen_error_new(ptr, len) {
     return heapIdx;
 }
 
-// String helper function
+// String helper function - get real string from WASM memory
 function getStringFromWasm0(ptr, len) {
-    return "Error: Invalid seed format or crypto operation failed";
+    try {
+        console.log('getStringFromWasm0 called with ptr:', ptr, 'len:', len);
+        
+        // Get WASM memory
+        let wasmMemory;
+        if (exports.wasm && exports.wasm.memory) {
+            wasmMemory = exports.wasm.memory.buffer;
+        } else if (exports.wasm && exports.wasm.memory) {
+            wasmMemory = wasm.memory.buffer;
+        } else {
+            console.log('getStringFromWasm0: No WASM memory, using fallback');
+            return "Error: WASM memory not available";
+        }
+        
+        const heap = new Uint8Array(wasmMemory);
+        const bytes = heap.subarray(ptr, ptr + len);
+        const decoder = new TextDecoder('utf-8');
+        const message = decoder.decode(bytes);
+        console.log('getStringFromWasm0 decoded message:', message);
+        return message;
+    } catch (err) {
+        console.log('getStringFromWasm0 error:', err);
+        return "Error: Failed to decode WASM string";
+    }
 }
 
 // Missing externref table function

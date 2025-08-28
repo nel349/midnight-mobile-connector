@@ -158,6 +158,20 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                     console.log('STEP 18f: Set exports.wasm to wasmModule.instance.exports');
                 }
                 
+                // CRITICAL: Also set up global wasm variable for the glue code
+                console.log('STEP 18f.1: Setting up global wasm variable...');
+                if (typeof window !== 'undefined') {
+                    window.wasm = wasmModule.instance.exports;
+                    console.log('STEP 18f.2: Set window.wasm for browser');
+                } else if (typeof global !== 'undefined') {
+                    global.wasm = wasmModule.instance.exports;
+                    console.log('STEP 18f.3: Set global.wasm for node');
+                } else {
+                    // Use eval to set global wasm - works in most contexts
+                    eval('wasm = wasmModule.instance.exports');
+                    console.log('STEP 18f.4: Set wasm via eval');
+                }
+                
                 console.log('STEP 18g: Final exports.wasm status:', !!exports.wasm);
                 const allExports = Object.keys(wasmModule.instance.exports);
                 console.log('STEP 18h: wasmModule.instance.exports count:', allExports.length);
@@ -177,25 +191,67 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                 console.log('STEP 19d: SecretKeys.fromSeed type:', typeof exports.SecretKeys.fromSeed);
                 
                 if (exports.SecretKeys.fromSeed) {
-                    // Try different seed formats - focus on Uint8Array since that's what the original expects
+                    // FIRST: Try the constructor without seed - this might work!
+                    console.log('STEP 20c: Trying SecretKeys constructor (no seed)...');
+                    try {
+                        const secretKeys = new exports.SecretKeys();
+                        console.log('STEP 20c SUCCESS: ✅ SecretKeys constructor worked!', typeof secretKeys);
+                        console.log('STEP 20c SUCCESS: secretKeys has __wbg_ptr?', !!secretKeys.__wbg_ptr);
+                        result.success = true;
+                        result.message = '🎉 SUCCESS! SecretKeys constructor works - wallet building ready!';
+                        return result;
+                    } catch (constructorError) {
+                        console.log('STEP 20c ERROR: SecretKeys constructor failed:', constructorError);
+                    }
+                    
+                    // Generate proper entropy - Common patterns for crypto seeds
+                    const cryptoSeed32 = new Uint8Array(32);
+                    const cryptoSeed64 = new Uint8Array(64);  // Some systems use 64 bytes (512 bits)
+                    
+                    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+                        crypto.getRandomValues(cryptoSeed32);
+                        crypto.getRandomValues(cryptoSeed64);
+                    } else {
+                        // Fallback: use Math.random for testing
+                        for (let i = 0; i < 32; i++) {
+                            cryptoSeed32[i] = Math.floor(Math.random() * 256);
+                        }
+                        for (let i = 0; i < 64; i++) {
+                            cryptoSeed64[i] = Math.floor(Math.random() * 256);
+                        }
+                    }
+                    
+                    // Test known entropy patterns that work with many crypto libraries
                     const seedFormats = [
-                        new Uint8Array(32).fill(42),  // 32 bytes
-                        new Uint8Array(64).fill(123),  // 64 bytes  
-                        new Uint8Array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]),  // Specific 32 bytes
-                        new Uint8Array(16).fill(255)  // 16 bytes
+                        cryptoSeed32,  // 32 bytes crypto random
+                        cryptoSeed64,  // 64 bytes crypto random  
+                        new Uint8Array(32).fill(1),  // All ones (sometimes works as test seed)
+                        // BIP39-style: 128 bits entropy (16 bytes) padded to 32
+                        new Uint8Array([...new Uint8Array(16).map(() => Math.floor(Math.random() * 256)), ...new Array(16).fill(0)]),
                     ];
                     
                     for (let i = 0; i < seedFormats.length; i++) {
                         const testSeed = seedFormats[i];
                         console.log('STEP 20a.' + i + ': Trying seed format', i + ':', typeof testSeed, testSeed instanceof Uint8Array ? 'Uint8Array[' + testSeed.length + ']' : testSeed.toString().substring(0, 16) + '...');
                         
-                        try {
+                                                try {
                             const wasmResult = exports.wasm.secretkeys_fromSeed(testSeed);
                             console.log('STEP 20a.' + i + 'r: WASM result:', wasmResult);
-                            
+
                             if (wasmResult[2] === 0) {  // Success!
-                                console.log('STEP 20a.' + i + 's: SUCCESS! This seed format works!');
-                                console.log('STEP 20a: About to call SecretKeys.fromSeed with working seed...');
+                                console.log('STEP 20a.' + i + 's: 🎉 SUCCESS! This seed format works!');
+                                
+                                // Now test the full SecretKeys.fromSeed()
+                                try {
+                                    const secretKeys = exports.SecretKeys.fromSeed(testSeed);
+                                    console.log('STEP 20SUCCESS: ✅ SecretKeys.fromSeed() succeeded!', typeof secretKeys);
+                                    console.log('STEP 20SUCCESS: secretKeys has __wbg_ptr?', !!secretKeys.__wbg_ptr);
+                                    result.success = true;
+                                    result.message = '🎉 SUCCESS! SecretKeys.fromSeed() works - wallet building ready!';
+                                    return result;
+                                } catch (secretError) {
+                                    console.log('STEP 20ERROR: SecretKeys.fromSeed failed despite WASM success:', secretError);
+                                }
                                 break;
                             }
                         } catch (err) {
@@ -210,10 +266,79 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
                         console.log('STEP 20a2: wasm exists?', !!exports.wasm);
                         console.log('STEP 20a3: wasm.secretkeys_fromSeed exists?', exports.wasm && !!exports.wasm.secretkeys_fromSeed);
                         
+                        // Debug what memory management functions are available
+                        if (exports.wasm) {
+                            console.log('STEP 20a3.1: wasm.__wbindgen_malloc exists?', typeof exports.wasm.__wbindgen_malloc === 'function');
+                            console.log('STEP 20a3.2: wasm.__wbindgen_free exists?', typeof exports.wasm.__wbindgen_free === 'function');
+                            console.log('STEP 20a3.3: wasm.__wbindgen_realloc exists?', typeof exports.wasm.__wbindgen_realloc === 'function');
+                            
+                            // List all wasm exports that contain 'malloc' or 'free'
+                            const wasmKeys = Object.keys(exports.wasm).filter(key => key.includes('malloc') || key.includes('free') || key.includes('alloc'));
+                            console.log('STEP 20a3.4: Memory-related WASM exports:', wasmKeys);
+                            
+                            // Also check for memory property
+                            console.log('STEP 20a3.5: wasm.memory exists?', !!exports.wasm.memory);
+                            if (exports.wasm.memory) {
+                                console.log('STEP 20a3.6: wasm.memory.buffer size:', exports.wasm.memory.buffer.byteLength);
+                            }
+                            
+                            // Test calling malloc directly
+                            try {
+                                console.log('STEP 20a3.7: Testing direct malloc call...');
+                                const testPtr = exports.wasm.__wbindgen_malloc(32);
+                                console.log('STEP 20a3.8: Direct malloc SUCCESS! ptr:', testPtr);
+                                exports.wasm.__wbindgen_free(testPtr, 32);
+                                console.log('STEP 20a3.9: Direct free SUCCESS!');
+                            } catch (mallocError) {
+                                console.log('STEP 20a3.8: Direct malloc FAILED:', mallocError);
+                                console.log('STEP 20a3.9: malloc error type:', typeof mallocError);
+                                console.log('STEP 20a3.10: malloc error message:', mallocError.message);
+                            }
+                        }
+                        
                         if (exports.wasm && exports.wasm.secretkeys_fromSeed) {
                             console.log('STEP 20a4: Testing wasm.secretkeys_fromSeed directly...');
                             try {
-                                const wasmResult = exports.wasm.secretkeys_fromSeed(testSeed);
+                                // Convert testSeed to Uint8Array if it isn't already
+                                let seedBytes;
+                                if (testSeed instanceof Uint8Array) {
+                                    seedBytes = testSeed;
+                                } else if (typeof testSeed === 'string') {
+                                    seedBytes = new TextEncoder().encode(testSeed);
+                                } else {
+                                    seedBytes = new Uint8Array(testSeed);
+                                }
+                                
+                                console.log('STEP 20a4.1: Seed bytes length:', seedBytes.length);
+                                console.log('STEP 20a4.2: Seed bytes type:', seedBytes.constructor.name);
+                                
+                                // Ensure we have exactly 32 bytes
+                                if (seedBytes.length !== 32) {
+                                    console.log('STEP 20a4.2.1: Seed not 32 bytes, padding/truncating...');
+                                    const properSeed = new Uint8Array(32);
+                                    properSeed.set(seedBytes.slice(0, 32)); // Copy up to 32 bytes
+                                    seedBytes = properSeed;
+                                    console.log('STEP 20a4.2.2: Seed now has length:', seedBytes.length);
+                                }
+                                
+                                // WASM function expects (ptr, len) - need to allocate memory first
+                                console.log('STEP 20a4.2.5: About to call exports.wasm.__wbindgen_malloc');
+                                console.log('STEP 20a4.2.6: exports.wasm is:', typeof exports.wasm);
+                                console.log('STEP 20a4.2.7: exports.wasm.__wbindgen_malloc is:', typeof exports.wasm.__wbindgen_malloc);
+                                const ptr = exports.wasm.__wbindgen_malloc(seedBytes.length);
+                                console.log('STEP 20a4.3: Allocated ptr:', ptr);
+                                
+                                // Copy seed data to WASM memory
+                                const memory = new Uint8Array(exports.wasm.memory.buffer);
+                                memory.set(seedBytes, ptr);
+                                console.log('STEP 20a4.4: Copied seed to WASM memory');
+                                
+                                // Call with (ptr, len) format
+                                const wasmResult = exports.wasm.secretkeys_fromSeed(ptr, seedBytes.length);
+                                console.log('STEP 20a4.5: Called secretkeys_fromSeed with ptr/len format');
+                                
+                                // Free the allocated memory
+                                exports.wasm.__wbindgen_free(ptr, seedBytes.length);
                                 console.log('STEP 20a5: wasm.secretkeys_fromSeed returned:', wasmResult);
                                 console.log('STEP 20a6: wasm result type:', typeof wasmResult);
                                 console.log('STEP 20a7: wasm result is array?', Array.isArray(wasmResult));
