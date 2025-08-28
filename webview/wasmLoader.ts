@@ -86,24 +86,29 @@ window.loadMidnightWasm = async function(wasmBase64, jsCode) {
             
             console.log('Available key-related functions:', availableFunctions);
             
-            // Test key generation
+            // Test key generation with available functions
             try {
-                console.log('Testing sampleSigningKey...');
-                const signingKey = exports.sampleSigningKey();
-                console.log('Signing key generated:', typeof signingKey);
+                console.log('Testing sampleSigningKey generation...');
                 
-                if (signingKey && exports.signatureVerifyingKey) {
-                    console.log('Testing signatureVerifyingKey...');
-                    const verifyingKey = exports.signatureVerifyingKey(signingKey);
-                    console.log('Verifying key generated:', typeof verifyingKey);
+                if (exports.sampleSigningKey) {
+                    const signingKey = exports.sampleSigningKey();
+                    console.log('Signing key generated:', typeof signingKey, signingKey ? 'SUCCESS' : 'FAILED');
                     
-                    result.message = '🎉 KEY GENERATION SUCCESS! Generated signing key and verifying key. Functions work: ' + availableFunctions.slice(0, 3).join(', ');
+                    if (exports.signatureVerifyingKey && signingKey) {
+                        const verifyingKey = exports.signatureVerifyingKey(signingKey);
+                        console.log('Verifying key generated:', typeof verifyingKey, verifyingKey ? 'SUCCESS' : 'FAILED');
+                        
+                        result.message = '🎉 KEY GENERATION SUCCESS! Generated signing + verifying keys using current WASM functions.';
+                    } else {
+                        result.message = '🎉 Signing key generated but verifying key failed. Need to test key pairs separately.';
+                    }
                 } else {
-                    result.message = '🎉 WASM LOADED! Functions found: ' + availableFunctions.slice(0, 5).join(', ');
+                    result.message = '🎉 sampleSigningKey not available. Available: encodeCoinPublicKey, decodeCoinPublicKey, etc.';
                 }
+                
             } catch (keyError) {
-                console.error('Key generation error:', keyError);
-                result.message = '🎉 WASM LOADED! Key test failed: ' + keyError.message + ' | Functions: ' + availableFunctions.slice(0, 3).join(', ');
+                console.error('Key generation test error:', keyError);
+                result.message = '🎉 Key generation test failed: ' + keyError.message;
             }
         } catch (evalError) {
             // Find remaining export statements
