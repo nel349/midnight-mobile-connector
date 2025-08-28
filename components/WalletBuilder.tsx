@@ -3,6 +3,8 @@ import { View, Text, Button, StyleSheet, ScrollView } from 'react-native';
 import Step1_BasicCrypto from './Step1_BasicCrypto';
 import Step2_SeedDerivation from './Step2_SeedDerivation';
 import Step3_KeyDerivation from './Step3_KeyDerivation';
+import Step4_AddressGeneration from './Step4_AddressGeneration';
+import { MidnightWallet } from '../lib/midnightWallet';
 
 /**
  * Midnight Wallet Builder - Following MIDNIGHT_MOBILE_PLAN.md
@@ -19,6 +21,7 @@ type WalletPhase = 'overview' | 'foundation' | 'seed-derivation' | 'key-derivati
 
 export default function WalletBuilder() {
   const [currentPhase, setCurrentPhase] = useState<WalletPhase>('overview');
+  const [wallet, setWallet] = useState<MidnightWallet | null>(null);
 
   const renderPhaseContent = () => {
     switch (currentPhase) {
@@ -44,7 +47,7 @@ export default function WalletBuilder() {
               <Text style={styles.statusText}>✅ Phase 1: Foundation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 2: Seed Derivation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 3: Key Derivation COMPLETE</Text>
-              <Text style={styles.statusText}>🔄 Phase 4: Address Generation IN PROGRESS</Text>
+              <Text style={styles.statusText}>✅ Phase 4: Address Generation COMPLETE</Text>
               <Text style={styles.statusText}>⏳ Phase 5: Network Integration PENDING</Text>
             </View>
           </View>
@@ -79,7 +82,7 @@ export default function WalletBuilder() {
             <Text style={styles.phaseDescription}>
               HKDF key derivation and deterministic key generation
             </Text>
-            <Step3_KeyDerivation />
+            <Step3_KeyDerivation onWalletGenerated={setWallet} />
           </View>
         );
 
@@ -88,14 +91,9 @@ export default function WalletBuilder() {
           <View style={styles.phaseContent}>
             <Text style={styles.phaseTitle}>🏠 Phase 4: Address Generation</Text>
             <Text style={styles.phaseDescription}>
-              Bech32m Midnight address encoding from public keys
+              Bech32m Midnight address encoding compatible with Lace wallet
             </Text>
-            <View style={styles.comingSoon}>
-              <Text style={styles.comingSoonText}>🚧 Coming Soon</Text>
-              <Text style={styles.comingSoonDetail}>
-                Generate Midnight addresses in Bech32m format: mn_shield-addr_test1...
-              </Text>
-            </View>
+            <Step4_AddressGeneration wallet={wallet} />
           </View>
         );
 

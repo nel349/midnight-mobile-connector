@@ -5,6 +5,10 @@ import WalletGeneration from './phase3/WalletGeneration';
 import KeyPairDisplay from './phase3/KeyPairDisplay';
 import ConsistencyTest from './phase3/ConsistencyTest';
 
+interface Props {
+  onWalletGenerated?: (wallet: MidnightWallet) => void;
+}
+
 /**
  * Phase 3: Mobile Midnight Key Derivation
  * 
@@ -14,12 +18,17 @@ import ConsistencyTest from './phase3/ConsistencyTest';
  * - ConsistencyTest: Test deterministic generation
  */
 
-export default function Step3_KeyDerivation() {
+export default function Step3_KeyDerivation({ onWalletGenerated }: Props) {
   const [wallet, setWallet] = useState<MidnightWallet | null>(null);
+
+  const handleWalletGenerated = (newWallet: MidnightWallet) => {
+    setWallet(newWallet);
+    onWalletGenerated?.(newWallet);
+  };
 
   return (
     <ScrollView style={styles.container}>
-      <WalletGeneration onWalletGenerated={setWallet} />
+      <WalletGeneration onWalletGenerated={handleWalletGenerated} />
       <KeyPairDisplay wallet={wallet} />
       <ConsistencyTest wallet={wallet} />
     </ScrollView>
