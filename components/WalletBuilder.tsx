@@ -18,7 +18,7 @@ import { MidnightWallet } from '../lib/midnightWallet';
  * Phase 5: Network Integration 🌐 (Testnet connection)
  */
 
-type WalletPhase = 'overview' | 'foundation' | 'seed-derivation' | 'key-derivation' | 'address-generation' | 'network-integration';
+type WalletPhase = 'overview' | 'foundation' | 'seed-derivation' | 'key-derivation' | 'address-generation' | 'network-integration' | 'crypto-test' | 'hd-wallet';
 
 export default function WalletBuilder() {
   const [currentPhase, setCurrentPhase] = useState<WalletPhase>('overview');
@@ -29,9 +29,9 @@ export default function WalletBuilder() {
       case 'overview':
         return (
           <View style={styles.phaseContent}>
-            <Text style={styles.title}>🌙 Midnight Wallet Builder</Text>
+            <Text style={styles.title}>🔧 Development & Testing Tools</Text>
             <Text style={styles.subtitle}>
-              Complete wallet development following the official plan
+              Explore wallet development phases and test individual components
             </Text>
             
             <View style={styles.phaseList}>
@@ -43,6 +43,12 @@ export default function WalletBuilder() {
               <Text style={styles.phaseItem}>Phase 5: 🌐 Network Integration (Testnet)</Text>
             </View>
 
+            <View style={styles.phaseList}>
+              <Text style={styles.phaseTitle}>Testing Tools:</Text>
+              <Text style={styles.phaseItem}>🔐 Crypto Test (Ed25519 + X25519 algorithms)</Text>
+              <Text style={styles.phaseItem}>⭐ HD Wallet (BIP39 seed derivation)</Text>
+            </View>
+
             <View style={styles.statusContainer}>
               <Text style={styles.statusTitle}>Current Status:</Text>
               <Text style={styles.statusText}>✅ Phase 1: Foundation COMPLETE</Text>
@@ -50,7 +56,7 @@ export default function WalletBuilder() {
               <Text style={styles.statusText}>✅ Phase 3: Key Derivation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 4: Address Generation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 5: Network Integration COMPLETE</Text>
-              <Text style={styles.statusText}>💼 Multi-Wallet Manager available in main tabs!</Text>
+              <Text style={styles.statusText}>💼 Production Multi-Wallet available in main tabs!</Text>
             </View>
           </View>
         );
@@ -110,6 +116,28 @@ export default function WalletBuilder() {
           </View>
         );
 
+      case 'crypto-test':
+        return (
+          <View style={styles.phaseContent}>
+            <Text style={styles.phaseTitle}>🔑 Crypto Algorithm Testing</Text>
+            <Text style={styles.phaseDescription}>
+              Test Ed25519 and X25519 cryptographic algorithms
+            </Text>
+            <Step1_BasicCrypto />
+          </View>
+        );
+
+      case 'hd-wallet':
+        return (
+          <View style={styles.phaseContent}>
+            <Text style={styles.phaseTitle}>⭐ HD Wallet Testing</Text>
+            <Text style={styles.phaseDescription}>
+              Test BIP39 seed derivation and HD wallet functionality
+            </Text>
+            <Step2_SeedDerivation />
+          </View>
+        );
+
       default:
         return null;
     }
@@ -127,6 +155,8 @@ export default function WalletBuilder() {
             { id: 'key-derivation', label: 'Key Derivation', icon: '🔑' },
             { id: 'address-generation', label: 'Address Generation', icon: '🏠' },
             { id: 'network-integration', label: 'Network Integration', icon: '🌐' },
+            { id: 'crypto-test', label: 'Crypto Test', icon: '🔐' },
+            { id: 'hd-wallet', label: 'HD Wallet', icon: '⭐' },
           ].map((phase) => (
             <View key={phase.id} style={styles.navButton}>
               <Button

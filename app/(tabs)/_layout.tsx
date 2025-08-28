@@ -13,7 +13,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      initialRouteName="index"
+      initialRouteName="multi-wallet"
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
@@ -28,31 +28,17 @@ export default function TabLayout() {
         }),
       }}>
       <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Wallet Builder',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="hammer.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="crypto-test"
-        options={{
-          title: 'Crypto Test',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="key.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="step2"
-        options={{
-          title: 'HD Wallet',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="star.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="multi-wallet"
         options={{
           title: 'Multi-Wallet',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Development',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="hammer.fill" color={color} />,
         }}
       />
     </Tabs>
