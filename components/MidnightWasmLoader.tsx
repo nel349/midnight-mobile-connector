@@ -1,10 +1,10 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, Button, StyleSheet, Alert } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { Asset } from 'expo-asset';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Button, StyleSheet, Text, View } from 'react-native';
+import { WebView } from 'react-native-webview';
+import { zswapGlueCode } from '../assets/zswapGlueCode';
 import { webviewScript } from '../webview-script';
 import { wasmLoaderScript } from '../webview/wasmLoader';
-import { zswapGlueCode } from '../assets/zswapGlueCode';
 
 interface WasmTestResult {
   success: boolean;
@@ -64,8 +64,18 @@ export default function MidnightWasmLoader() {
     }
     
     try {
-      console.log('📨 Received WebView message:', event.nativeEvent.data.substring(0, 200));
       const result = JSON.parse(event.nativeEvent.data);
+      
+      // Handle forwarded console messages from WebView
+      if (result.type === 'console') {
+        const prefix = result.level === 'log' ? '📱 WebView:' : 
+                      result.level === 'warn' ? '⚠️ WebView:' : 
+                      '❌ WebView:';
+        console.log(`${prefix} ${result.message}`);
+        return;
+      }
+      
+      console.log('📨 Received WebView message:', JSON.stringify(result).substring(0, 200));
       
       if (result.success && result.message === 'WebView ready') {
         console.log('✅ WebView is ready');
