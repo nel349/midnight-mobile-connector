@@ -60,7 +60,14 @@ export interface NetworkConnection {
 export interface ConnectedWallet {
   wallet: MidnightWallet;
   connection: NetworkConnection;
-  networkEndpoints?: typeof MidnightNetworkEndpoints[NetworkType]; // Direct network endpoints for GraphQL queries
+  networkEndpoints?: {
+    name: string;
+    networkId: NetworkIdType;
+    indexerUri: string;
+    indexerWsUri: string;
+    proverServerUri: string;
+    substrateNodeUri: string;
+  }; // Direct network endpoints for GraphQL queries
 }
 
 /**
@@ -159,7 +166,14 @@ export const connectWalletToNetwork = async (
     console.log(`   📱 Using mobile-compatible approach (no WASM dependencies)`);
     
     // Check if we need to use local prover as fallback
-    let finalEndpoints = endpoints;
+    let finalEndpoints = {
+      name: endpoints.name,
+      networkId: endpoints.networkId,
+      indexerUri: endpoints.indexerUri,
+      indexerWsUri: endpoints.indexerWsUri,
+      proverServerUri: endpoints.proverServerUri,
+      substrateNodeUri: endpoints.substrateNodeUri
+    };
     
     // If using testnet and remote prover failed, create hybrid endpoints with local prover
     if (networkType === 'testnet' && connection.status === 'connected') {
@@ -170,10 +184,8 @@ export const connectWalletToNetwork = async (
         
         if (localProverWorking) {
           console.log('   🔄 Using hybrid configuration: TestNet + Local Prover');
-          finalEndpoints = {
-            ...endpoints,
-            proverServerUri: localProverUri
-          };
+          // Update prover URI to local fallback
+          finalEndpoints.proverServerUri = localProverUri;
         }
       }
     }

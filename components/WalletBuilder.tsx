@@ -50,6 +50,7 @@ export default function WalletBuilder() {
               <Text style={styles.statusText}>✅ Phase 3: Key Derivation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 4: Address Generation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 5: Network Integration COMPLETE</Text>
+              <Text style={styles.statusText}>💼 Multi-Wallet Manager available in main tabs!</Text>
             </View>
           </View>
         );
