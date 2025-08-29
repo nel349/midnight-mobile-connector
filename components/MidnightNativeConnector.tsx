@@ -96,7 +96,8 @@ export default function MidnightNativeConnector() {
 
     setIsLoading(true);
     try {
-      const testRecipient = 'mid_test_recipient_address_placeholder_123456789';
+      // Use proper Midnight testnet address format for testing
+      const testRecipient = 'mn_shield-addr_test1cq4k0d4sxsluqguvmqr7ntfzg5txj2xcey04pq682seexrdnelrqxqxzmqrj34cwcnaerl3cz55qlpy3cydf7wv0tc3sg34eavp2998jgq330k0a';
       const testAmount = 100n;
       
       addLog(`📝 Creating test transaction: ${testAmount} DUST to ${testRecipient.substring(0, 20)}...`);
