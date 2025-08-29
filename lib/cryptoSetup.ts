@@ -131,6 +131,12 @@ const createWebCryptoPolyfill = () => {
 export const setupCrypto = () => {
   console.log('🔧 Setting up React Native crypto polyfill...');
   
+  // Setup Buffer polyfill for React Native
+  if (!globalThis.Buffer) {
+    const { Buffer } = require('buffer');
+    (globalThis as any).Buffer = Buffer;
+  }
+  
   // Create crypto object if it doesn't exist
   if (!globalThis.crypto) {
     (globalThis as any).crypto = {};
