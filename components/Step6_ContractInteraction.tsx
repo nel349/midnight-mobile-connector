@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
-import { Alert, Button, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Button, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createTestnetContractClient, MidnightContractClient } from '../lib/midnightContractClient';
 import {
   createLocalProviders,
   createTestnetProviders,
+  createProvidersForNetwork,
   queryContractState,
   testProviderConnection,
+  testContractRead,
+  quickContractSetup,
+  createContractReader,
+  getAvailableNetworks,
   type BasicMidnightProviders
 } from '../lib/midnightProviders';
+import { DEFAULT_CONTRACT_ADDRESS, UI_CONSTANTS } from '../lib/constants';
+import { type ContractLedgerReader } from '../lib/contractStateReader';
 
 interface Props {
   // Can be extended to pass wallet data when needed
@@ -26,23 +33,23 @@ interface Props {
 export default function ContractInteraction({}: Props) {
   const [client, setClient] = useState<MidnightContractClient | null>(null);
   const [providers, setProviders] = useState<BasicMidnightProviders | null>(null);
+  const [ledgerReader, setLedgerReader] = useState<ContractLedgerReader | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [networkType, setNetworkType] = useState<'testnet' | 'local'>('testnet');
-  const [contractAddress, setContractAddress] = useState('0200c79698a29be94e3b4e3f19ceb1a6f25b206cda15347e68caf15083e715a69c6a');
-  const [functionName, setFunctionName] = useState('get_token_balance');
-  const [parameters, setParameters] = useState('["0x123"]');
+  const [contractAddress, setContractAddress] = useState(DEFAULT_CONTRACT_ADDRESS);
+  const [functionName, setFunctionName] = useState(UI_CONSTANTS.DEFAULT_FUNCTION_NAME);
+  const [parameters, setParameters] = useState(UI_CONSTANTS.DEFAULT_PARAMETERS);
   const [isLoading, setIsLoading] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
+  const [rawState, setRawState] = useState<any>(null);
 
   const handleInitializeClient = async () => {
     setIsLoading(true);
     try {
       console.log(`🔧 Initializing Midnight Providers (${networkType})...`);
       
-      // Initialize REAL providers based on network type
-      const midnightProviders = networkType === 'testnet' 
-        ? await createTestnetProviders() 
-        : await createLocalProviders();
+      // Initialize providers with network selection and local proof server fallback
+      const midnightProviders = await createProvidersForNetwork(networkType);
       
       // Initialize legacy client for compatibility
       const contractClient = createTestnetContractClient();
@@ -52,9 +59,16 @@ export default function ContractInteraction({}: Props) {
       setClient(contractClient);
       setIsInitialized(true);
       
+      const networkDetails = getAvailableNetworks().find(n => n.key === networkType);
+      
       Alert.alert(
-        'REAL Providers Initialized', 
-        `✅ Connected to REAL Midnight infrastructure!\nNetwork: ${networkType.toUpperCase()}\nReady for contract interactions`
+        'Providers Initialized', 
+        `✅ Connected to Midnight infrastructure!\n\n` +
+        `Network: ${networkType.toUpperCase()}\n` +
+        `Indexer: ${networkDetails?.details.indexer}\n` +
+        `Proof Server: ${networkDetails?.details.proofServer}\n` +
+        `Node: ${networkDetails?.details.node}\n\n` +
+        `Ready for contract interactions!`
       );
       
     } catch (error) {
@@ -175,8 +189,8 @@ export default function ContractInteraction({}: Props) {
         return;
       }
       
-      // Direct query for the specific bank contract
-      const bankContractAddress = '0200c79698a29be94e3b4e3f19ceb1a6f25b206cda15347e68caf15083e715a69c6a';
+      // Direct query for the default contract
+      const bankContractAddress = DEFAULT_CONTRACT_ADDRESS;
       
       // Try to query the bank contract with correct schema
       console.log(`🏦 Attempting to query bank contract: ${bankContractAddress}`);
@@ -262,13 +276,207 @@ export default function ContractInteraction({}: Props) {
     );
   };
 
+  // NEW LEDGER READING FUNCTIONS
+
+  const handleQuickLedgerTest = async () => {
+    if (!contractAddress.trim()) {
+      Alert.alert('Error', 'Please enter a contract address');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('📖 Starting quick ledger read test...');
+      
+      // Use the selected network type since the contract exists locally
+      const testNetwork = networkType;
+      const result = await testContractRead(contractAddress, testNetwork);
+      
+      setLastResult({
+        type: 'quick_ledger_test',
+        timestamp: new Date().toISOString(),
+        ...result
+      });
+
+      if (result.rawState) {
+        setRawState(result.rawState);
+      }
+
+              Alert.alert(
+        'Ledger Read Test',
+        result.success 
+          ? `✅ Contract state read successfully!\nNetwork: ${result.networkUsed?.toUpperCase()}\nContract: ${contractAddress.substring(0, 20)}...\nContract exists: ${result.contractExists}\nRaw state length: ${typeof result.rawState === 'string' ? result.rawState.length : 'N/A'}`
+          : `❌ Failed to read contract state\nNetwork: ${result.networkUsed?.toUpperCase()}\nContract: ${contractAddress.substring(0, 20)}...\nError: ${result.error}\n\n${contractAddress === DEFAULT_CONTRACT_ADDRESS ? '🔍 Note: Contract exists locally (confirmed via browser localStorage) but indexer queries return null. This may be a data consistency issue between the node and indexer.' : ''}\n\nAvailable contracts: ${result.availableContracts?.length || 0}\n${result.availableContracts?.slice(0, 2).map(addr => addr.substring(0, 20) + '...').join('\n') || 'None found'}`
+      );
+
+    } catch (error) {
+      console.error('Quick ledger test failed:', error);
+      Alert.alert('Test Failed', `❌ ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSetupLedgerReader = async () => {
+    if (!contractAddress.trim()) {
+      Alert.alert('Error', 'Please enter a contract address');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('🔧 Setting up ledger reader...');
+      
+      const { providers: newProviders, ledgerReader: newReader } = await quickContractSetup(
+        contractAddress,
+        undefined, // No ledger function yet (would be from managed files)
+        networkType
+      );
+
+      setProviders(newProviders);
+      setLedgerReader(newReader);
+
+      // Test reading the state
+      const state = await newReader.readLedgerState();
+      setRawState(state);
+      setLastResult({
+        type: 'ledger_reader_setup',
+        timestamp: new Date().toISOString(),
+        contractAddress,
+        statePreview: typeof state === 'string' ? state.substring(0, 100) + '...' : state
+      });
+
+      Alert.alert(
+        'Ledger Reader Ready',
+        `✅ Ledger reader set up successfully!\nContract: ${contractAddress.substring(0, 20)}...\nState type: ${typeof state}\nYou can now read contract state directly!`
+      );
+
+    } catch (error) {
+      console.error('Ledger reader setup failed:', error);
+      Alert.alert('Setup Failed', `❌ ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReadLedgerState = async () => {
+    if (!ledgerReader) {
+      Alert.alert('Error', 'Please set up ledger reader first');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('📖 Reading current ledger state...');
+      
+      const state = await ledgerReader.readLedgerState();
+      setRawState(state);
+      
+      setLastResult({
+        type: 'ledger_state_read',
+        timestamp: new Date().toISOString(),
+        contractAddress,
+        state,
+        stateInfo: {
+          type: typeof state,
+          length: typeof state === 'string' ? state.length : Object.keys(state || {}).length,
+          preview: typeof state === 'string' ? state.substring(0, 200) : JSON.stringify(state).substring(0, 200)
+        }
+      });
+
+      Alert.alert(
+        'Ledger State Read',
+        `✅ Current ledger state retrieved!\nType: ${typeof state}\nData: ${typeof state === 'string' ? 'Hex data (' + state.length + ' chars)' : 'Object with ' + Object.keys(state || {}).length + ' keys'}`
+      );
+
+    } catch (error) {
+      console.error('Ledger state read failed:', error);
+      Alert.alert('Read Failed', `❌ ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExploreContractHistory = async () => {
+    if (!providers) {
+      Alert.alert('Error', 'Please initialize providers first');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('🔍 Exploring contract history...');
+      
+      // Use the enhanced provider to get contract history
+      const history = await providers.publicDataProvider.queryContractHistory?.(contractAddress, 5);
+      
+      setLastResult({
+        type: 'contract_history',
+        timestamp: new Date().toISOString(),
+        contractAddress,
+        historyLength: history?.length || 0,
+        history: history || []
+      });
+
+      Alert.alert(
+        'Contract History',
+        `✅ Contract exploration complete!\nFound ${history?.length || 0} contract actions\nAddress: ${contractAddress.substring(0, 20)}...`
+      );
+
+    } catch (error) {
+      console.error('Contract history exploration failed:', error);
+      Alert.alert('Exploration Failed', `❌ ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>📄 Contract Interaction</Text>
+        <Text style={styles.title}>📄 Contract Interaction & Ledger Reading</Text>
         <Text style={styles.subtitle}>
-          Test smart contract interactions on Midnight TestNet
+          Test smart contract interactions and read contract state directly from the indexer
         </Text>
+      </View>
+
+      {/* Network Selection */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Network Configuration</Text>
+        <View style={styles.card}>
+          <Text style={styles.inputLabel}>Selected Network:</Text>
+          
+          {getAvailableNetworks().map((network) => (
+            <TouchableOpacity
+              key={network.key}
+              style={[
+                styles.networkOption,
+                networkType === network.key && styles.networkOptionSelected
+              ]}
+              onPress={() => setNetworkType(network.key)}
+              disabled={isLoading}
+            >
+              <Text style={[
+                styles.networkOptionText,
+                networkType === network.key && styles.networkOptionTextSelected
+              ]}>
+                {network.name}
+              </Text>
+              <Text style={[
+                styles.networkOptionDescription,
+                networkType === network.key && { color: '#e6f3ff' }
+              ]}>
+                {network.description}
+              </Text>
+              <Text style={[
+                styles.networkDetails,
+                networkType === network.key && { color: '#cce7ff' }
+              ]}>
+                Indexer: {network.details.indexer} | Proof: {network.details.proofServer}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Client Status */}
@@ -278,9 +486,12 @@ export default function ContractInteraction({}: Props) {
           <Text style={styles.statusText}>
             Status: {isInitialized ? '✅ Ready' : '⭕ Not Initialized'}
           </Text>
+          <Text style={styles.detailText}>
+            Network: {networkType.toUpperCase()} {isInitialized && '(Connected)'}
+          </Text>
           {client && (
             <Text style={styles.detailText}>
-              Network: {client.getNetworkInfo().name} (ID: {client.getNetworkInfo().networkId})
+              Client Network: {client.getNetworkInfo().name} (ID: {client.getNetworkInfo().networkId})
             </Text>
           )}
           
@@ -390,6 +601,58 @@ export default function ContractInteraction({}: Props) {
         </View>
       </View>
 
+      {/* NEW: Ledger Reading Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>📖 Ledger Reading (NEW!)</Text>
+        <View style={styles.card}>
+          <Text style={styles.noteText}>
+            ✨ Read contract state directly without transactions using the indexer GraphQL API
+          </Text>
+          
+          <View style={styles.buttonSpacer} />
+          
+          <Button
+            title="⚡ Quick Ledger Test"
+            onPress={handleQuickLedgerTest}
+            disabled={isLoading}
+            color="#32D74B"
+          />
+          
+          <View style={styles.buttonSpacer} />
+          
+          <Button
+            title="🔧 Setup Ledger Reader"
+            onPress={handleSetupLedgerReader}
+            disabled={isLoading}
+            color="#007AFF"
+          />
+          
+          <View style={styles.buttonSpacer} />
+          
+          <Button
+            title="📖 Read Current State"
+            onPress={handleReadLedgerState}
+            disabled={!ledgerReader || isLoading}
+            color="#5856D6"
+          />
+          
+          <View style={styles.buttonSpacer} />
+          
+          <Button
+            title="🔍 Explore History"
+            onPress={handleExploreContractHistory}
+            disabled={!isInitialized || isLoading}
+            color="#FF9500"
+          />
+
+          <View style={styles.buttonSpacer} />
+          
+          <Text style={styles.statusText}>
+            Ledger Reader: {ledgerReader ? '✅ Ready' : '⭕ Not Set Up'}
+          </Text>
+        </View>
+      </View>
+
       {/* Results */}
       {lastResult && (
         <View style={styles.section}>
@@ -397,6 +660,28 @@ export default function ContractInteraction({}: Props) {
           <View style={styles.card}>
             <Text style={styles.resultText}>
               {JSON.stringify(lastResult, null, 2)}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Raw State Display */}
+      {rawState && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📄 Raw Contract State</Text>
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>State Type: {typeof rawState}</Text>
+            <Text style={styles.inputLabel}>
+              Size: {typeof rawState === 'string' ? `${rawState.length} characters` : `${Object.keys(rawState || {}).length} properties`}
+            </Text>
+            <View style={styles.buttonSpacer} />
+            <Text style={styles.resultText}>
+              {typeof rawState === 'string' 
+                ? rawState.length > 1000 
+                  ? rawState.substring(0, 1000) + '\n\n... (truncated, full length: ' + rawState.length + ' chars)'
+                  : rawState
+                : JSON.stringify(rawState, null, 2)
+              }
             </Text>
           </View>
         </View>
@@ -493,5 +778,36 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginTop: 10,
     fontStyle: 'italic',
+  },
+  networkOption: {
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  networkOptionSelected: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  networkOptionText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  networkOptionTextSelected: {
+    color: 'white',
+  },
+  networkOptionDescription: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  networkDetails: {
+    fontSize: 10,
+    color: '#888',
+    marginTop: 4,
+    fontFamily: 'monospace',
   },
 });

@@ -6,6 +6,42 @@
  */
 
 import { MidnightNetworkId } from './midnightContractClient';
+import {
+  type PublicDataProvider,
+  type ContractLedgerReader,
+  createIndexerPublicDataProvider,
+  createContractLedgerReader,
+  setupContractReader,
+} from './contractStateReader';
+import { NETWORK_CONSTANTS, DEFAULT_CONTRACT_ADDRESS } from './constants';
+import { networkIdToHex, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+
+/**
+ * Prepends the network ID to a contract address (same as official indexer provider)
+ * This is required because the indexer expects addresses with network ID prefix
+ * while the ledger WASM API provides addresses without it
+ */
+function prependNetworkIdHex(contractAddress: string): string {
+  try {
+    const networkHex = networkIdToHex(getNetworkId());
+    const prefixedAddress = `${networkHex}${contractAddress}`;
+    console.log(`🔧 Prepending network ID: ${contractAddress} → ${prefixedAddress}`);
+    return prefixedAddress;
+  } catch (error) {
+    console.log(`⚠️ Failed to prepend network ID, using original address: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return contractAddress;
+  }
+}
+
+// Try to import the official indexer provider with proper error handling
+let indexerPublicDataProvider: any = null;
+try {
+  indexerPublicDataProvider = require('@midnight-ntwrk/midnight-js-indexer-public-data-provider').indexerPublicDataProvider;
+  console.log('✅ Official indexer provider loaded');
+} catch (error) {
+  console.log('⚠️ Official indexer provider failed to load, using custom implementation');
+  console.log('Error:', error instanceof Error ? error.message : 'Unknown error');
+}
 
 // Core provider configuration
 export interface MidnightProvidersConfig {
@@ -17,15 +53,15 @@ export interface MidnightProvidersConfig {
 }
 
 /**
- * Create TestNet providers configuration
+ * Create TestNet providers configuration with local proof server fallback
  */
 export function createTestnetProvidersConfig(): MidnightProvidersConfig {
   return {
     networkId: MidnightNetworkId.TestNet,
-    indexerUrl: 'https://indexer.testnet-02.midnight.network/api/v1/graphql',
-    indexerWsUrl: 'wss://indexer.testnet-02.midnight.network/api/v1/graphql',
-    proofServerUrl: 'https://proof-server.testnet-02.midnight.network',
-    nodeUrl: 'wss://rpc.testnet-02.midnight.network',
+    indexerUrl: NETWORK_CONSTANTS.TESTNET.INDEXER_URL,
+    indexerWsUrl: NETWORK_CONSTANTS.TESTNET.INDEXER_WS_URL,
+    proofServerUrl: NETWORK_CONSTANTS.PROOF_SERVER_URL, // Always use local proof server as fallback
+    nodeUrl: NETWORK_CONSTANTS.TESTNET.NODE_URL,
   };
 }
 
@@ -35,10 +71,10 @@ export function createTestnetProvidersConfig(): MidnightProvidersConfig {
 export function createLocalProvidersConfig(): MidnightProvidersConfig {
   return {
     networkId: MidnightNetworkId.DevNet,
-    indexerUrl: 'http://localhost:8088/api/v1/graphql',
-    indexerWsUrl: 'ws://localhost:8088/api/v1/graphql',
-    proofServerUrl: 'http://localhost:8089',
-    nodeUrl: 'ws://localhost:9944',
+    indexerUrl: NETWORK_CONSTANTS.LOCAL.INDEXER_URL,
+    indexerWsUrl: NETWORK_CONSTANTS.LOCAL.INDEXER_WS_URL,
+    proofServerUrl: NETWORK_CONSTANTS.PROOF_SERVER_URL, // Consistent local proof server
+    nodeUrl: NETWORK_CONSTANTS.LOCAL.NODE_URL,
   };
 }
 
@@ -69,6 +105,111 @@ export class ReactNativeContractQuerier {
   constructor(private graphqlUrl: string) {
     console.log('🌐 ReactNativeContractQuerier initialized');
     console.log(`   GraphQL URL: ${graphqlUrl}`);
+  }
+
+  // Allow access to the GraphQL URL for enhanced queries
+  getGraphqlUrl(): string {
+    return this.graphqlUrl;
+  }
+
+  // First, let's add a method to find actual contracts
+  async findActualContracts(): Promise<string[]> {
+    console.log('🔍 Finding actual contracts on the network...');
+    
+    try {
+      const exploration = await this.exploreExistingContracts();
+      const contracts = exploration?.contractAddresses || [];
+      console.log(`✅ Found ${contracts.length} actual contracts:`, contracts);
+      return contracts;
+    } catch (error) {
+      console.error('❌ Failed to find contracts:', error);
+      return [];
+    }
+  }
+
+  // Enhanced query that includes contract state data for ledger reading
+  async queryContractStateWithData(contractAddress: string): Promise<any> {
+    console.log(`📡 Querying contract state with data: ${contractAddress.substring(0, 20)}...`);
+    
+    // 🔧 KEY FIX: Use network ID prefixed address (same as official indexer provider)
+    const prefixedAddress = prependNetworkIdHex(contractAddress);
+    console.log(`🔧 Using prefixed address for indexer query`);
+    
+    try {
+      // Use the exact same pattern as the working query, just add 'state' field
+      const query = `
+        query GetContractStateWithData($contractAddress: String!) {
+          contractAction(address: $contractAddress) {
+            __typename
+            state
+            ... on ContractDeploy {
+              address
+              transaction {
+                hash
+              }
+            }
+            ... on ContractCall {
+              address
+              entryPoint
+              transaction {
+                hash
+              }
+            }
+            ... on ContractUpdate {
+              address
+              transaction {
+                hash
+              }
+            }
+          }
+        }
+      `;
+      
+      const response = await fetch(this.graphqlUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          variables: { contractAddress: prefixedAddress },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.errors) {
+        console.error('❌ GraphQL errors:', result.errors);
+        console.error('❌ Full error details:', JSON.stringify(result.errors, null, 2));
+        console.error('❌ Query that failed:', query);
+        
+        // Try fallback to just get the basic info without state
+        console.log('🔄 Trying fallback query without state field...');
+        try {
+          const fallbackResult = await this.queryActualContractState(contractAddress);
+          if (fallbackResult?.contractAction) {
+            console.log('✅ Fallback query worked, but no state data available');
+            return { contractAction: { ...fallbackResult.contractAction, state: null } };
+          }
+        } catch (fallbackError) {
+          console.log('❌ Fallback query also failed');
+        }
+        
+        throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
+      }
+
+      console.log(`✅ Contract state with data query successful`);
+      return result.data;
+
+    } catch (error) {
+      console.error('❌ Contract state with data query failed:', error);
+      throw error;
+    }
   }
 
   async queryContractState(contractAddress: string): Promise<any> {
@@ -223,7 +364,7 @@ export class ReactNativeContractQuerier {
         name: 'contractActionNoVars',
         query: `
           query GetContractActionNoVars {
-            contractAction(address: "0200c79698a29be94e3b4e3f19ceb1a6f25b206cda15347e68caf15083e715a69c6a") {
+            contractAction(address: "${DEFAULT_CONTRACT_ADDRESS}") {
               __typename
               ... on ContractDeploy {
                 address
@@ -264,7 +405,7 @@ export class ReactNativeContractQuerier {
           },
           body: JSON.stringify({
             query: queryAttempt.query,
-            variables: { contractAddress },
+            variables: { contractAddress: prependNetworkIdHex(contractAddress) },
           }),
         });
 
@@ -513,6 +654,7 @@ export class ReactNativeContractQuerier {
 export interface BasicMidnightProviders {
   contractQuerier: ReactNativeContractQuerier;
   privateStateProvider: any;
+  publicDataProvider: PublicDataProvider;
   config: MidnightProvidersConfig;
 }
 
@@ -529,12 +671,30 @@ export async function createBasicProviders<StateId extends string = string, Stat
   try {
     const contractQuerier = new ReactNativeContractQuerier(config.indexerUrl);
     const privateStateProvider = createMobilePrivateStateProvider<StateId, State>();
+    
+    // Try to use the official indexer provider (same as browser bank UI)
+    let publicDataProvider;
+    if (indexerPublicDataProvider) {
+      console.log('🔄 Using official Midnight indexer provider (same as browser bank UI)');
+      try {
+        publicDataProvider = indexerPublicDataProvider(config.indexerUrl, config.indexerWsUrl);
+        console.log('✅ Official indexer provider initialized successfully');
+      } catch (error) {
+        console.log('❌ Official indexer provider failed, falling back to custom implementation');
+        console.log('Error:', error.message);
+        publicDataProvider = createIndexerPublicDataProvider(contractQuerier);
+      }
+    } else {
+      console.log('🔄 Using custom indexer provider implementation');
+      publicDataProvider = createIndexerPublicDataProvider(contractQuerier);
+    }
 
     console.log('✅ Basic Midnight providers created');
 
     return {
       contractQuerier,
       privateStateProvider,
+      publicDataProvider,
       config,
     };
 
@@ -558,6 +718,25 @@ export async function createTestnetProviders<StateId extends string = string, St
 export async function createLocalProviders<StateId extends string = string, State = any>(): Promise<BasicMidnightProviders> {
   const config = createLocalProvidersConfig();
   return createBasicProviders<StateId, State>(config);
+}
+
+/**
+ * Create providers for a specific network type
+ */
+export async function createProvidersForNetwork<StateId extends string = string, State = any>(
+  networkType: 'testnet' | 'local'
+): Promise<BasicMidnightProviders> {
+  console.log(`🌐 Creating providers for ${networkType} network...`);
+  
+  const config = networkType === 'testnet' 
+    ? createTestnetProvidersConfig() 
+    : createLocalProvidersConfig();
+    
+  const providers = await createBasicProviders<StateId, State>(config);
+  
+  console.log(`✅ ${networkType} providers created with local proof server fallback`);
+  
+  return providers;
 }
 
 /**
@@ -654,14 +833,138 @@ export function getAvailableNetworks() {
     {
       key: 'testnet' as const,
       name: 'TestNet-02',
-      description: 'Official Midnight TestNet',
-      config: createTestnetProvidersConfig()
+      description: 'Official Midnight TestNet + Local Proof Server',
+      config: createTestnetProvidersConfig(),
+      details: {
+        indexer: 'Remote TestNet',
+        proofServer: 'Local (localhost:6300)',
+        node: 'Remote TestNet'
+      }
     },
     {
       key: 'local' as const,
       name: 'Local Development', 
-      description: 'Local Midnight node (requires docker setup)',
-      config: createLocalProvidersConfig()
+      description: 'Full local Midnight node + Local Proof Server',
+      config: createLocalProvidersConfig(),
+      details: {
+        indexer: 'Local (localhost:8088)',
+        proofServer: 'Local (localhost:6300)',
+        node: 'Local (localhost:9944)'
+      }
     }
   ];
+}
+
+/**
+ * Create a contract ledger reader for a specific contract
+ */
+export async function createContractReader<LedgerType = any>(
+  providers: BasicMidnightProviders,
+  contractAddress: string,
+  ledgerFunction?: (stateData: any) => LedgerType
+): Promise<ContractLedgerReader<LedgerType>> {
+  console.log(`🔧 Creating contract reader for: ${contractAddress.substring(0, 20)}...`);
+  
+  return createContractLedgerReader(
+    contractAddress,
+    providers.publicDataProvider,
+    ledgerFunction
+  );
+}
+
+/**
+ * Quick setup for reading from a specific contract
+ */
+export async function quickContractSetup<LedgerType = any>(
+  contractAddress: string,
+  ledgerFunction?: (stateData: any) => LedgerType,
+  networkType: 'testnet' | 'local' = 'testnet'
+): Promise<{
+  providers: BasicMidnightProviders;
+  ledgerReader: ContractLedgerReader<LedgerType>;
+}> {
+  console.log(`⚡ Quick contract setup for ${networkType}...`);
+  
+  const providers = await createProvidersForNetwork(networkType);
+  const ledgerReader = await createContractReader(providers, contractAddress, ledgerFunction);
+  
+  console.log('✅ Quick contract setup complete');
+  
+  return {
+    providers,
+    ledgerReader,
+  };
+}
+
+/**
+ * Test reading from a contract (without needing managed files)
+ */
+export async function testContractRead(
+  contractAddress: string,
+  networkType: 'testnet' | 'local' = 'testnet'
+): Promise<{
+  success: boolean;
+  contractExists: boolean;
+  rawState?: any;
+  error?: string;
+  availableContracts?: string[];
+  networkUsed?: string;
+}> {
+  console.log(`🧪 Testing contract read on ${networkType}: ${contractAddress.substring(0, 20)}...`);
+  
+  try {
+    const { providers, ledgerReader } = await quickContractSetup(contractAddress, undefined, networkType);
+    
+    // First, let's see what contracts actually exist
+    const actualContracts = await providers.contractQuerier.findActualContracts();
+    console.log(`🔍 Found ${actualContracts.length} contracts on ${networkType} network`);
+    
+    // Test basic connection
+    const connectionOk = await providers.publicDataProvider.queryContractState(contractAddress);
+    
+    if (!connectionOk) {
+      return {
+        success: false,
+        contractExists: false,
+        error: 'Contract not found',
+        availableContracts: actualContracts,
+        networkUsed: networkType
+      };
+    }
+    
+    // Try to read raw state
+    const rawState = await ledgerReader.readLedgerState();
+    
+    console.log('✅ Contract read test successful');
+    console.log(`   State type: ${typeof rawState}`);
+    console.log(`   State preview: ${JSON.stringify(rawState).substring(0, 100)}...`);
+    
+    return {
+      success: true,
+      contractExists: true,
+      rawState,
+      availableContracts: actualContracts,
+      networkUsed: networkType
+    };
+    
+  } catch (error) {
+    console.error('❌ Contract read test failed:', error);
+    
+    // Try to get available contracts even if the test failed
+    let availableContracts: string[] = [];
+    try {
+      const providers = await createProvidersForNetwork(networkType);
+      availableContracts = await providers.contractQuerier.findActualContracts();
+    } catch (e) {
+      console.warn('Could not fetch available contracts');
+    }
+    
+    return {
+      success: false,
+      contractExists: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      availableContracts,
+      networkUsed: networkType
+    };
+  }
 }
