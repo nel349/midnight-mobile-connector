@@ -80,7 +80,7 @@ const TYPE_MAPPINGS = {
  * Function categorization based on name patterns
  */
 const FUNCTION_CATEGORIES = {
-  read: ['get_', 'verify_', 'check_', 'query_', 'read_'],
+  read: ['get_', 'verify_', 'check_', 'query_', 'read_', 'account_exists'],
   write: ['create_', 'deposit', 'withdraw', 'send_', 'claim_', 'approve_', 'grant_', 'set_'],
   utility: ['public_key', 'hash_', 'encode_', 'decode_'],
 };
@@ -100,6 +100,7 @@ const FUNCTION_DESCRIPTIONS: Record<string, string> = {
   'claim_authorized_transfer': '📥 Claim tokens from an approved transfer',
   'grant_disclosure_permission': '🔓 Grant permission to view account details',
   'set_timestamp': '⏰ Set blockchain timestamp (admin function)',
+  'account_exists': '👤 Check if an account exists and validate credentials',
   'public_key': '🔑 Generate public key from private key',
 };
 
@@ -195,20 +196,20 @@ function getResultTypeDescription(resultType: CircuitDefinition['result-type']):
 
 /**
  * Load and parse contract from the contracts directory
+ * 
+ * 🚀 FIXED: No dynamic imports - React Native friendly!
  */
-export async function loadContractInfo(contractPath: string = 'contracts/compiler/contract-info.json'): Promise<ContractMap> {
+export function loadContractInfo(): ContractMap {
   try {
-    console.log(`📂 Loading contract info from: ${contractPath}`);
+    console.log(`📂 Loading contract info from embedded data...`);
     
-    // In a real app, you'd use fetch or require
-    // For now, we'll assume the contract info is available
-    const contractInfoModule = await import(`../${contractPath}`);
-    const contractInfo: ContractInfo = contractInfoModule.default || contractInfoModule;
+    // Import the contract info directly (no dynamic imports!)
+    const contractInfo = require('../contracts/compiler/contract-info.json') as ContractInfo;
     
     return parseContractInfo(contractInfo);
   } catch (error) {
     console.error('❌ Failed to load contract info:', error);
-    throw new Error(`Failed to load contract from ${contractPath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to load contract info: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -233,22 +234,48 @@ export function generateParameterTypes(circuit: ParsedCircuit): string {
 
 /**
  * Convert user input to proper circuit parameters
+ * 🚀 USER-FRIENDLY: Handles string inputs and converts to required types automatically
  */
 export function convertUserInputToParameters(circuit: ParsedCircuit, userInputs: Record<string, string>): any[] {
   return circuit.arguments.map(arg => {
     const value = userInputs[arg.name];
-    if (!value) throw new Error(`Missing parameter: ${arg.name}`);
+    if (!value && value !== '0') throw new Error(`Missing parameter: ${arg.name}`);
+    
+    console.log(`🔧 Converting parameter ${arg.name} (${arg.type}) from "${value}"`);
     
     if (arg.inputType === 'hex') {
-      // Convert hex string to Uint8Array
-      const hex = value.startsWith('0x') ? value.slice(2) : value;
-      if (hex.length % 2 !== 0) throw new Error(`Invalid hex string for ${arg.name}: ${value}`);
-      return new Uint8Array(hex.match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || []);
+      // For user_id, pins, passwords, public keys, etc. - convert string to hex bytes
+      if (arg.name.includes('user_id') || arg.name.includes('pin') || arg.name.includes('password') || arg.name.includes('public_key') || arg.name.includes('pk')) {
+        // Convert string to UTF-8 bytes then to hex
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(value);
+        console.log(`   String "${value}" → ${bytes.length} bytes → Uint8Array`);
+        return bytes;
+      } else {
+        // Handle manual hex input (with or without 0x prefix)
+        let hex = value.trim();
+        if (hex.startsWith('0x')) hex = hex.slice(2);
+        
+        // Pad to required length if needed
+        const requiredLength = (arg.type as any).length || 32; // Default to 32 bytes
+        if (hex.length < requiredLength * 2) {
+          hex = hex.padEnd(requiredLength * 2, '0');
+        }
+        
+        if (hex.length % 2 !== 0) hex = '0' + hex;
+        
+        const bytes = new Uint8Array(hex.match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || []);
+        console.log(`   Hex "${value}" → ${bytes.length} bytes → Uint8Array`);
+        return bytes;
+      }
     } else if (arg.inputType === 'number') {
       const num = Number(value);
       if (isNaN(num)) throw new Error(`Invalid number for ${arg.name}: ${value}`);
-      return BigInt(num);
+      const result = BigInt(num);
+      console.log(`   Number "${value}" → ${result}n (BigInt)`);
+      return result;
     } else {
+      console.log(`   String "${value}" → unchanged`);
       return value;
     }
   });
@@ -256,34 +283,52 @@ export function convertUserInputToParameters(circuit: ParsedCircuit, userInputs:
 
 /**
  * Validate user input for a circuit parameter
+ * 🚀 USER-FRIENDLY: More lenient validation with helpful error messages
  */
 export function validateParameter(arg: ParsedCircuit['arguments'][0], value: string): { valid: boolean; error?: string } {
   if (!value.trim()) {
-    return { valid: false, error: 'Parameter is required' };
+    return { valid: false, error: 'Required field' };
   }
 
   if (arg.inputType === 'hex') {
-    const hex = value.startsWith('0x') ? value.slice(2) : value;
-    if (!/^[0-9a-fA-F]*$/.test(hex)) {
-      return { valid: false, error: 'Must be a valid hex string' };
-    }
-    if (hex.length % 2 !== 0) {
-      return { valid: false, error: 'Hex string must have even length' };
-    }
-    // Check byte length if specified
-    const expectedLength = arg.type.match(/Bytes\[(\d+)\]/)?.[1];
-    if (expectedLength && hex.length !== parseInt(expectedLength) * 2) {
-      return { valid: false, error: `Must be exactly ${expectedLength} bytes (${parseInt(expectedLength) * 2} hex chars)` };
+    // For user_id and similar fields - accept any string (will be converted to bytes)
+    if (arg.name.includes('user_id') || arg.name.includes('public_key') || arg.name.includes('pk') || arg.name.includes('pin')) {
+      if (value.length > 50) { // Reasonable limit for string inputs
+        return { valid: false, error: 'String too long (max 50 characters)' };
+      }
+      return { valid: true }; // Accept any reasonable string
+    } else {
+      // For manual hex inputs - validate hex format but be more lenient
+      let hex = value.trim();
+      if (hex.startsWith('0x')) hex = hex.slice(2);
+      
+      if (!/^[0-9a-fA-F]*$/.test(hex)) {
+        return { valid: false, error: 'Invalid hex. Use 0-9, a-f, A-F only' };
+      }
+      
+      // Check length requirements for bytes (but allow auto-padding)
+      const expectedLength = arg.type.match(/Bytes\[(\d+)\]/)?.[1];
+      if (expectedLength) {
+        const maxHexLength = parseInt(expectedLength) * 2;
+        if (hex.length > maxHexLength) {
+          return { valid: false, error: `Too long. Max ${maxHexLength} hex chars (${expectedLength} bytes)` };
+        }
+        // Auto-padding will handle shorter inputs
+      }
     }
   } else if (arg.inputType === 'number') {
     const num = Number(value);
-    if (isNaN(num) || num < 0) {
-      return { valid: false, error: 'Must be a positive number' };
+    if (isNaN(num)) {
+      return { valid: false, error: 'Enter a valid number' };
     }
+    if (num < 0) {
+      return { valid: false, error: 'Must be 0 or positive' };
+    }
+    
     // Check max value if specified
     const maxMatch = arg.type.match(/max: (\d+)/);
     if (maxMatch && num > parseInt(maxMatch[1])) {
-      return { valid: false, error: `Must be ≤ ${maxMatch[1]}` };
+      return { valid: false, error: `Too large. Max: ${maxMatch[1]}` };
     }
   }
 

@@ -50,6 +50,9 @@ export type ImpureCircuits<T> = {
   verify_account_status(context: __compactRuntime.CircuitContext<T>,
                         user_id_0: Uint8Array,
                         pin_0: Uint8Array): __compactRuntime.CircuitResults<T, []>;
+  account_exists(context: __compactRuntime.CircuitContext<T>,
+                 user_id_0: Uint8Array,
+                 pin_0: Uint8Array): __compactRuntime.CircuitResults<T, boolean>;
 }
 
 export type PureCircuits = {
@@ -101,6 +104,9 @@ export type Circuits<T> = {
   verify_account_status(context: __compactRuntime.CircuitContext<T>,
                         user_id_0: Uint8Array,
                         pin_0: Uint8Array): __compactRuntime.CircuitResults<T, []>;
+  account_exists(context: __compactRuntime.CircuitContext<T>,
+                 user_id_0: Uint8Array,
+                 pin_0: Uint8Array): __compactRuntime.CircuitResults<T, boolean>;
   public_key(context: __compactRuntime.CircuitContext<T>, sk_0: Uint8Array): __compactRuntime.CircuitResults<T, Uint8Array>;
 }
 

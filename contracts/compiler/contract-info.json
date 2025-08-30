@@ -360,6 +360,29 @@
       }
     },
     {
+      "name": "account_exists",
+      "pure": false,
+      "arguments": [
+        {
+          "name": "user_id",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "pin",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Boolean"
+      }
+    },
+    {
       "name": "public_key",
       "pure": true,
       "arguments": [

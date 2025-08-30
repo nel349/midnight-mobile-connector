@@ -18,13 +18,10 @@ import { DEFAULT_CONTRACT_ADDRESS } from '../lib/constants';
 import { 
   type ContractMap, 
   type ParsedCircuit, 
-  parseContractInfo,
+  loadContractInfo,
   convertUserInputToParameters,
   validateParameter 
 } from '../lib/contractParser';
-
-// Import the actual contract info
-import contractInfoData from '../contracts/compiler/contract-info.json';
 
 interface RealCircuitTesterProps {
   onCircuitCall?: (circuit: ParsedCircuit, parameters: any[], result: any) => void;
@@ -43,6 +40,26 @@ interface CircuitCall {
 
 type TabType = 'read' | 'write' | 'utility' | 'all';
 
+// Helper function to generate user-friendly placeholders
+const getUserFriendlyPlaceholder = (arg: any): string => {
+  if (arg.name.includes('user_id')) {
+    return 'e.g., john_doe or alice123';
+  }
+  if (arg.name.includes('pin') || arg.name.includes('password')) {
+    return 'e.g., mySecretPin123';
+  }
+  if (arg.name.includes('amount') || arg.name.includes('balance')) {
+    return 'e.g., 1000';
+  }
+  if (arg.inputType === 'hex') {
+    return 'e.g., abc123 or 0xabc123';
+  }
+  if (arg.inputType === 'number') {
+    return 'e.g., 42';
+  }
+  return arg.placeholder || 'Enter value...';
+};
+
 export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({ 
   onCircuitCall, 
   networkType = 'local' 
@@ -59,17 +76,17 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
   // Parse contract on mount
   useEffect(() => {
     try {
-      console.log('🔍 Parsing real contract info...');
-      const parsed = parseContractInfo(contractInfoData);
+      console.log('🔍 Loading real contract info...');
+      const parsed = loadContractInfo();
       setContractMap(parsed);
-      console.log('✅ Contract parsed successfully:', {
+      console.log('✅ Contract loaded successfully:', {
         pure: parsed.pure.length,
         impure: parsed.impure.length,
         total: parsed.all.length
       });
     } catch (error) {
-      console.error('❌ Failed to parse contract:', error);
-      Alert.alert('Contract Parse Error', `Failed to parse contract: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('❌ Failed to load contract:', error);
+      Alert.alert('Contract Load Error', `Failed to load contract: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, []);
 
@@ -172,12 +189,30 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
       const convertedParams = convertUserInputToParameters(selectedCircuit, parameters);
       console.log('   Converted params:', convertedParams);
 
+      // Create a user-friendly preview of parameter conversion
+      const parameterPreview = selectedCircuit.arguments.map((arg, index) => {
+        const originalValue = parameters[arg.name];
+        const convertedValue = convertedParams[index];
+        let preview = '';
+        
+        if (convertedValue instanceof Uint8Array) {
+          preview = `Uint8Array[${convertedValue.length}] (${Array.from(convertedValue.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join(' ')}${convertedValue.length > 4 ? '...' : ''})`;
+        } else if (typeof convertedValue === 'bigint') {
+          preview = `${convertedValue}n (BigInt)`;
+        } else {
+          preview = `"${convertedValue}" (string)`;
+        }
+        
+        return `  ${arg.name}: "${originalValue}" → ${preview}`;
+      }).join('\n');
+
       // TODO: Integrate with actual ContractLedgerReader.callPureCircuit()
       // For now, show success with actual parameter conversion
       const mockResult = {
         success: true,
         circuit: selectedCircuit.name,
         parameters: convertedParams,
+        parameterPreview,
         resultType: selectedCircuit.resultType,
         timestamp: new Date().toISOString(),
         // This would be the actual circuit result
@@ -192,8 +227,8 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
       onCircuitCall?.(selectedCircuit, convertedParams, mockResult);
 
       Alert.alert(
-        'Circuit Executed',
-        `✅ ${selectedCircuit.name}\n⏱️ ${duration}ms\n🎯 Type: ${selectedCircuit.category}\n📋 Result: ${selectedCircuit.resultType}`,
+        'Circuit Executed Successfully! 🎉',
+        `✅ ${selectedCircuit.name}\n⏱️ ${duration}ms\n🎯 Type: ${selectedCircuit.category}\n📋 Result: ${selectedCircuit.resultType}\n\n🔧 Parameter Conversion:\n${parameterPreview}`,
       );
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -292,6 +327,24 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
                   {arg.name} ({arg.type})
                 </Text>
                 <Text style={styles.parameterDescription}>{arg.description}</Text>
+                
+                {/* User-friendly input hint */}
+                {(arg.name.includes('user_id') || arg.name.includes('pin')) && (
+                  <Text style={styles.inputHint}>
+                    💡 Enter as plain text (will auto-convert to bytes)
+                  </Text>
+                )}
+                {arg.inputType === 'hex' && !arg.name.includes('user_id') && !arg.name.includes('pin') && (
+                  <Text style={styles.inputHint}>
+                    💡 Enter hex (with or without 0x prefix, auto-padding applied)
+                  </Text>
+                )}
+                {arg.inputType === 'number' && (
+                  <Text style={styles.inputHint}>
+                    💡 Enter as number (will convert to BigInt)
+                  </Text>
+                )}
+                
                 <TextInput
                   style={[
                     styles.parameterInput,
@@ -299,7 +352,7 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
                   ]}
                   value={parameters[arg.name] || ''}
                   onChangeText={(value) => handleParameterChange(arg.name, value)}
-                  placeholder={arg.placeholder}
+                  placeholder={getUserFriendlyPlaceholder(arg)}
                   autoCapitalize="none"
                   keyboardType={arg.inputType === 'number' ? 'numeric' : 'default'}
                 />
@@ -485,6 +538,12 @@ const styles = StyleSheet.create({
   parameterDescription: {
     fontSize: 12,
     color: '#666',
+    marginBottom: 4,
+  },
+  inputHint: {
+    fontSize: 11,
+    color: '#007AFF',
+    fontStyle: 'italic',
     marginBottom: 8,
   },
   parameterInput: {

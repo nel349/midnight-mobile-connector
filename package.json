@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "update-contract": "cd ../midnight-bank/bank-contract && npm run build && cd - && cp -Rf ../midnight-bank/bank-contract/dist/managed/bank/compiler ./contracts/ && cp -Rf ../midnight-bank/bank-contract/dist/managed/bank/contract ./contracts/"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -18,9 +19,7 @@
     "@midnight-ntwrk/midnight-js-contracts": "^2.0.2",
     "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "^2.0.2",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^2.0.2",
-    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^2.0.2",
     "@midnight-ntwrk/midnight-js-level-private-state-provider": "^2.0.2",
-    "@midnight-ntwrk/midnight-js-network-id": "^2.0.2",
     "@midnight-ntwrk/midnight-js-types": "^2.0.2",
     "@midnight-ntwrk/midnight-js-utils": "^2.0.2",
     "@midnight-ntwrk/wallet": "^5.0.0",
