@@ -446,50 +446,7 @@ export default function MultiWalletManager() {
           )}
         </View>
 
-        {/* Development Actions */}
-        <View style={styles.devSection}>
-          <Text style={styles.devTitle}>Development Actions:</Text>
-          
-          <Button
-            title="🔧 Test Contract Client"
-            onPress={async () => {
-              console.log('🧪 Testing Midnight Contract Client...');
-              try {
-                const client = createTestnetContractClient();
-                const networkInfo = client.getNetworkInfo();
-                Alert.alert('Contract Client Test', `✅ Contract client initialized\nNetwork: ${networkInfo.name} (ID: ${networkInfo.networkId})`);
-              } catch (error) {
-                console.error('Contract client test failed:', error);
-                Alert.alert('Test Failed', `❌ ${error}`);
-              }
-            }}
-            color="#007AFF"
-          />
-          
-          <View style={styles.buttonSpacer} />
-          
-          <Button
-            title="Clear All Wallets"
-            onPress={() => {
-              Alert.alert(
-                'Clear All Wallets',
-                'This will delete ALL wallets. This action cannot be undone.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { 
-                    text: 'Clear All', 
-                    style: 'destructive',
-                    onPress: async () => {
-                      await walletManager.clearAllWallets();
-                      refreshStore();
-                    }
-                  }
-                ]
-              );
-            }}
-            color="#FF3B30"
-          />
-        </View>
+        {/* Development Access */}
       </ScrollView>
     );
   }
@@ -636,6 +593,8 @@ export default function MultiWalletManager() {
       </ScrollView>
     );
   }
+
+  // Contract interaction view
 
   return null;
 }
@@ -1154,5 +1113,17 @@ const styles = StyleSheet.create({
   },
   boldText: {
     fontWeight: 'bold',
+  },
+  devTestCard: {
+    backgroundColor: 'white',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  dangerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#d9534f',
   },
 });

@@ -5,6 +5,7 @@ import Step2_SeedDerivation from './Step2_SeedDerivation';
 import Step3_KeyDerivation from './Step3_KeyDerivation';
 import Step4_AddressGeneration from './Step4_AddressGeneration';
 import Step5_NetworkIntegration from './Step5_NetworkIntegration';
+import Step6_ContractInteraction from './Step6_ContractInteraction';
 import { MidnightWallet } from '../lib/midnightWallet';
 
 /**
@@ -18,7 +19,7 @@ import { MidnightWallet } from '../lib/midnightWallet';
  * Phase 5: Network Integration 🌐 (Testnet connection)
  */
 
-type WalletPhase = 'overview' | 'foundation' | 'seed-derivation' | 'key-derivation' | 'address-generation' | 'network-integration' | 'crypto-test' | 'hd-wallet';
+type WalletPhase = 'overview' | 'foundation' | 'seed-derivation' | 'key-derivation' | 'address-generation' | 'network-integration' | 'contract-interaction' | 'crypto-test' | 'hd-wallet';
 
 export default function WalletBuilder() {
   const [currentPhase, setCurrentPhase] = useState<WalletPhase>('overview');
@@ -41,6 +42,7 @@ export default function WalletBuilder() {
               <Text style={styles.phaseItem}>Phase 3: 🔑 Key Derivation (Deterministic keys)</Text>
               <Text style={styles.phaseItem}>Phase 4: 🏠 Address Generation (Bech32m)</Text>
               <Text style={styles.phaseItem}>Phase 5: 🌐 Network Integration (Testnet)</Text>
+              <Text style={styles.phaseItem}>Phase 6: 📄 Contract Interaction (Smart contracts)</Text>
             </View>
 
             <View style={styles.phaseList}>
@@ -56,6 +58,7 @@ export default function WalletBuilder() {
               <Text style={styles.statusText}>✅ Phase 3: Key Derivation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 4: Address Generation COMPLETE</Text>
               <Text style={styles.statusText}>✅ Phase 5: Network Integration COMPLETE</Text>
+              <Text style={styles.statusText}>🚧 Phase 6: Contract Interaction IN DEVELOPMENT</Text>
               <Text style={styles.statusText}>💼 Production Multi-Wallet available in main tabs!</Text>
             </View>
           </View>
@@ -116,6 +119,17 @@ export default function WalletBuilder() {
           </View>
         );
 
+      case 'contract-interaction':
+        return (
+          <View style={styles.phaseContent}>
+            <Text style={styles.phaseTitle}>📄 Phase 6: Contract Interaction</Text>
+            <Text style={styles.phaseDescription}>
+              Test smart contract interactions on Midnight TestNet
+            </Text>
+            <Step6_ContractInteraction />
+          </View>
+        );
+
       case 'crypto-test':
         return (
           <View style={styles.phaseContent}>
@@ -155,6 +169,7 @@ export default function WalletBuilder() {
             { id: 'key-derivation', label: 'Key Derivation', icon: '🔑' },
             { id: 'address-generation', label: 'Address Generation', icon: '🏠' },
             { id: 'network-integration', label: 'Network Integration', icon: '🌐' },
+            { id: 'contract-interaction', label: 'Contract Interaction', icon: '📄' },
             { id: 'crypto-test', label: 'Crypto Test', icon: '🔐' },
             { id: 'hd-wallet', label: 'HD Wallet', icon: '⭐' },
           ].map((phase) => (
