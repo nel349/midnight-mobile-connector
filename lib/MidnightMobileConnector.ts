@@ -252,29 +252,50 @@ export class MidnightMobileConnector {
     }
   }
 
-  /**
-   * Query balance from network
-   */
   async updateBalance(): Promise<void> {
     if (!this.walletState) {
       throw new Error('Wallet not initialized');
     }
 
-    console.log('💰 Querying balance for address:', this.walletState.address);
+    console.log('💰 Updating balance using Midnight indexer connection...');
 
     try {
-      // Query indexer for balance (GraphQL or REST)
-      const response = await fetch(`${this.config.indexer}/balance/${this.walletState.address}`);
-      
-      if (response.ok) {
-        const balanceData = await response.json();
-        this.walletState.balances['native'] = BigInt(balanceData.balance || 0);
-        console.log('✅ Balance updated:', this.walletState.balances['native'].toString());
-      } else {
-        console.log('⚠️ Balance query failed, keeping current balance');
+      // Step 1: Derive viewing keys from wallet seed
+      console.log('   🔑 Deriving viewing keys...');
+      const { deriveViewingKeyFromSeed } = await import('./viewingKeyDerivation');
+      const seed = await this.exportSeed();
+      const viewingKeys = await deriveViewingKeyFromSeed(seed);
+
+      if (viewingKeys.length === 0) {
+        throw new Error('No viewing keys could be derived from wallet seed');
       }
+
+      console.log(`   ✅ Generated ${viewingKeys.length} viewing key candidates`);
+
+      // Step 2: Connect to indexer
+      console.log('   🔌 Connecting to Midnight indexer...');
+      const { createTestnetIndexerConnection } = await import('./indexerConnection');
+      const indexer = createTestnetIndexerConnection();
+
+      const sessionId = await indexer.connectWithCandidates(viewingKeys);
+      console.log('   ✅ Connected to indexer with session:', sessionId.substring(0, 20) + '...');
+
+      // Step 3: TODO - Subscribe to shielded transactions (Phase 3)
+      console.log('   ⏳ Phase 3: Shielded transaction subscription - TODO');
+      console.log('   ⏳ Phase 4: Balance calculation from UTXOs - TODO');
+
+      // For now, keep current balance until we implement transaction subscription
+      console.log('   🔄 Keeping current balance until transaction subscription is implemented');
+
+      // Disconnect when done (for now)
+      await indexer.disconnect();
+
     } catch (error) {
-      console.error('❌ Balance query error:', error);
+      console.error('❌ Balance update via indexer failed:', error);
+      
+      // For testing purposes, keep the current balance approach
+      console.log('   🔄 Maintaining current balance state for testing');
+      // Don't throw - let the app continue working
     }
   }
 

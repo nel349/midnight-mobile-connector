@@ -106,7 +106,7 @@ export async function generateMidnightAddressFromZswap(
     const shieldedAddress = new addressFormat.ShieldedAddress(coinPublicKey, encryptionPublicKey);
     
     // Encode to Bech32m address
-    const addressBech32m = addressFormat.ShieldedAddress.codec.encode(networkId, shieldedAddress);
+    const addressBech32m = addressFormat.ShieldedAddress.codec.encode(networkId as any, shieldedAddress);
     const address = addressBech32m.asString();
     
     console.log('✅ REAL Midnight address generated:', address.substring(0, 50) + '...');

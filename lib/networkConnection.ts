@@ -326,30 +326,36 @@ const getBlockchainInfo = async (nodeUri: string): Promise<{height?: number, pee
 };
 
 /**
- * Query wallet balance using direct GraphQL
+ * Discover GraphQL schema from the indexer
  */
-const queryWalletBalance = async (indexerUri: string, addresses: string[]): Promise<any> => {
+const introspectGraphQLSchema = async (indexerUri: string): Promise<any> => {
   try {
-    console.log(`   📡 Querying ${indexerUri}...`);
+    console.log(`   🔍 Introspecting GraphQL schema at ${indexerUri}...`);
     
-    // Basic GraphQL query for wallet balance
-    // This is a simplified query - in production you'd use proper Midnight GraphQL schema
-    const query = {
+    const introspectionQuery = {
       query: `
-        query GetWalletBalance($addresses: [String!]!) {
-          coins(where: { address: { _in: $addresses } }) {
-            value
-            type
-            address
+        query IntrospectionQuery {
+          __schema {
+            queryType {
+              name
+            }
+            types {
+              name
+              kind
+              fields {
+                name
+                type {
+                  name
+                  kind
+                }
+              }
+            }
           }
         }
-      `,
-      variables: {
-        addresses
-      }
+      `
     };
     
-    const response = await axios.post(indexerUri, query, {
+    const response = await axios.post(indexerUri, introspectionQuery, {
       timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
@@ -359,30 +365,414 @@ const queryWalletBalance = async (indexerUri: string, addresses: string[]): Prom
     const result = response.data;
     
     if (result.errors) {
-      throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
+      console.log(`   ❌ Schema introspection failed: ${JSON.stringify(result.errors)}`);
+      return null;
     }
     
-    // Process balance data
-    const coins = result.data?.coins || [];
-    const dustCoins = coins.filter((coin: any) => coin.type === 'tDUST');
-    const totalDust = dustCoins.reduce((sum: number, coin: any) => sum + (parseFloat(coin.value) || 0), 0);
+    const schema = result.data?.__schema;
+    if (schema) {
+      console.log(`   ✅ Schema discovered. Query type: ${schema.queryType?.name}`);
+      
+      // Log all available types for debugging
+      const allTypes = schema.types.map((t: any) => t.name).sort();
+      console.log(`   📋 All available types (${allTypes.length}):`, allTypes.slice(0, 20).join(', ') + (allTypes.length > 20 ? '...' : ''));
+      
+      // Look for balance-related types (broader search)
+      const balanceTypes = schema.types.filter((type: any) => {
+        const name = type.name.toLowerCase();
+        return name.includes('balance') ||
+               name.includes('coin') ||
+               name.includes('utxo') ||
+               name.includes('output') ||
+               name.includes('transaction') ||
+               name.includes('transfer') ||
+               name.includes('asset') ||
+               name.includes('token') ||
+               name.includes('dust') ||
+               name.includes('shielded');
+      });
+      
+      if (balanceTypes.length > 0) {
+        console.log(`   💰 Found potential balance types:`, balanceTypes.map((t: any) => t.name));
+        return { schema, balanceTypes };
+      } else {
+        console.log(`   ⚠️ No obvious balance types found in schema`);
+        
+        // Try to find the Query type and its fields
+        const queryType = schema.types.find((t: any) => t.name === 'Query');
+        if (queryType && queryType.fields) {
+          const queryFields = queryType.fields.map((f: any) => f.name);
+          console.log(`   📋 Available Query fields (${queryFields.length}): ${queryFields.slice(0, 15).join(', ')}${queryFields.length > 15 ? '...' : ''}`);
+          return { schema, balanceTypes: [], queryFields };
+        }
+      }
+    }
     
+    return { schema, balanceTypes: [] };
+    
+  } catch (error) {
+    console.log(`   ❌ Schema introspection error: ${error}`);
+    return null;
+  }
+};
+
+/**
+ * Query wallet balance using direct GraphQL - now with schema discovery
+ */
+const queryWalletBalance = async (indexerUri: string, addresses: string[]): Promise<any> => {
+  try {
+    console.log(`   📡 Querying ${indexerUri}...`);
+    
+    // First try to discover the schema
+    const schemaInfo = await introspectGraphQLSchema(indexerUri);
+    
+    // Try queries based on discovered schema
+    if (schemaInfo?.balanceTypes?.length > 0) {
+      console.log(`   🎯 Using discovered balance types`);
+      
+      for (const balanceType of schemaInfo.balanceTypes) {
+        console.log(`   🔍 Trying balance query with type: ${balanceType.name}`);
+        
+        // Create targeted queries based on transaction type
+        const queries = [];
+        
+        if (balanceType.name.includes('Transaction')) {
+          // Transaction-based queries for Midnight
+          queries.push(
+            // Query 1: Look for transactions with our addresses in various fields
+            `query GetTransactions($addresses: [String!]!) { 
+              ${balanceType.name.toLowerCase()}(where: { 
+                _or: [
+                  { recipient: { _in: $addresses } },
+                  { sender: { _in: $addresses } },
+                  { address: { _in: $addresses } },
+                  { to: { _in: $addresses } },
+                  { from: { _in: $addresses } }
+                ]
+              }) { 
+                id hash recipient sender address to from value amount fee status blockHeight timestamp
+              } 
+            }`,
+            
+            // Query 2: Simpler transaction query
+            `query GetTransactions($addresses: [String!]!) { 
+              ${balanceType.name}(where: { recipient: { _in: $addresses } }) { 
+                id recipient value amount status
+              } 
+            }`,
+            
+            // Query 3: Very basic transaction query
+            `query GetTransactions { 
+              ${balanceType.name.toLowerCase()} { 
+                id recipient sender value amount hash status
+              } 
+            }`
+          );
+        } else {
+          // Generic balance queries for other types
+          queries.push(
+            `query GetBalance($addresses: [String!]!) { 
+              ${balanceType.name.toLowerCase()}(where: { address: { _in: $addresses } }) { 
+                value address type 
+              } 
+            }`,
+            `query GetBalance($addresses: [String!]!) { 
+              ${balanceType.name}(where: { address: { _in: $addresses } }) { 
+                value address type 
+              } 
+            }`
+          );
+        }
+        
+        for (const queryString of queries) {
+          try {
+            const query = { query: queryString, variables: { addresses } };
+            const response = await axios.post(indexerUri, query, {
+              timeout: 10000,
+              headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const result = response.data;
+            
+            if (!result.errors && result.data) {
+              console.log(`   ✅ Successful query with ${balanceType.name}!`);
+              console.log(`   📊 Response:`, JSON.stringify(result.data, null, 2));
+              
+              const dataKey = Object.keys(result.data)[0];
+              const items = result.data[dataKey] || [];
+              
+              return processBalanceData(items);
+            }
+          } catch (queryError) {
+            // Silent fail, try next
+          }
+        }
+      }
+    }
+    
+    // Try queries based on discovered query fields
+    if (schemaInfo?.queryFields?.length > 0) {
+      console.log(`   🎯 Trying discovered query fields`);
+      
+      // Look for balance-related query fields
+      const balanceFields = schemaInfo.queryFields.filter((field: string) => {
+        const name = field.toLowerCase();
+        return name.includes('balance') ||
+               name.includes('coin') ||
+               name.includes('utxo') ||
+               name.includes('transaction') ||
+               name.includes('transfer') ||
+               name.includes('dust') ||
+               name.includes('block') ||
+               name.includes('contract');
+      });
+      
+      console.log(`   💰 Found potential balance fields:`, balanceFields);
+      
+      for (const field of balanceFields) {
+        console.log(`   🔍 Trying query field: ${field}`);
+        
+        // Try various parameter patterns for each field
+        const queries = [
+          // Pattern 1: With address filter
+          `query GetBalance($addresses: [String!]!) { 
+            ${field}(where: { address: { _in: $addresses } }) { 
+              id address value amount 
+            } 
+          }`,
+          
+          // Pattern 2: With different address field name
+          `query GetBalance($addresses: [String!]!) { 
+            ${field}(where: { recipient: { _in: $addresses } }) { 
+              id recipient value amount 
+            } 
+          }`,
+          
+          // Pattern 3: With to/from filters
+          `query GetBalance($addresses: [String!]!) { 
+            ${field}(where: { _or: [{ to: { _in: $addresses } }, { from: { _in: $addresses } }] }) { 
+              id to from value amount 
+            } 
+          }`,
+          
+          // Pattern 4: Simple query without filters (get all, then filter)
+          `query GetAll { 
+            ${field} { 
+              id address recipient to from value amount 
+            } 
+          }`
+        ];
+        
+        for (const queryString of queries) {
+          try {
+            const query = { query: queryString, variables: { addresses } };
+            const response = await axios.post(indexerUri, query, {
+              timeout: 10000,
+              headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const result = response.data;
+            
+            if (!result.errors && result.data && result.data[field]) {
+              console.log(`   ✅ Successful query with field: ${field}!`);
+              console.log(`   📊 Response:`, JSON.stringify(result.data, null, 2));
+              
+              const items = result.data[field] || [];
+              
+              // Filter items by our addresses if we got all data
+              let filteredItems = items;
+              if (queryString.includes('GetAll')) {
+                filteredItems = items.filter((item: any) => 
+                  addresses.includes(item.address) ||
+                  addresses.includes(item.recipient) ||
+                  addresses.includes(item.to) ||
+                  addresses.includes(item.from)
+                );
+              }
+              
+              if (filteredItems.length > 0) {
+                return processBalanceData(filteredItems);
+              }
+            }
+          } catch (queryError) {
+            // Silent fail, try next
+          }
+        }
+      }
+    }
+    
+    // Fallback: try Midnight-specific queries based on documentation
+    console.log(`   🔄 Trying Midnight-specific queries...`);
+    
+    const fallbackQueries = [
+      // Midnight contractAction query (from docs)
+      `query GetContractBalances($addresses: [String!]!) { 
+        contractAction(address: { _in: $addresses }) {
+          ... on ContractDeploy {
+            address
+            unshieldedBalances {
+              tokenType
+              amount
+            }
+          }
+          ... on ContractCall {
+            address
+            unshieldedBalances {
+              tokenType
+              amount
+            }
+          }
+          ... on ContractUpdate {
+            address
+            unshieldedBalances {
+              tokenType
+              amount
+            }
+          }
+        }
+      }`,
+      
+      // Try getting all contract actions first
+      `query GetAllContracts { 
+        contractAction {
+          ... on ContractDeploy {
+            address
+            unshieldedBalances {
+              tokenType
+              amount
+            }
+          }
+          ... on ContractCall {
+            address
+            unshieldedBalances {
+              tokenType
+              amount
+            }
+          }
+        }
+      }`,
+      
+      // Basic block query to see if we can get any data
+      `query GetBlocks { 
+        block(limit: 5) {
+          id
+          height
+          timestamp
+        }
+      }`,
+      
+      // Standard transaction query
+      `query GetTransactions { 
+        transaction(limit: 10) {
+          id
+          hash
+          blockHeight
+        }
+      }`
+    ];
+    
+    for (const queryString of fallbackQueries) {
+      try {
+        const query = { query: queryString, variables: { addresses } };
+        const response = await axios.post(indexerUri, query, {
+          timeout: 10000,
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = response.data;
+        
+        if (!result.errors && result.data) {
+          console.log(`   ✅ Fallback query succeeded!`);
+          console.log(`   📊 Response:`, JSON.stringify(result.data, null, 2));
+          
+          const dataKey = Object.keys(result.data)[0];
+          const items = result.data[dataKey] || [];
+          
+          return processBalanceData(items);
+        }
+      } catch (queryError) {
+        console.log(`   ⚠️ Fallback query failed, trying next...`);
+      }
+    }
+    
+    // Ultimate fallback - return empty
+    console.log(`   ❌ All GraphQL queries failed, returning empty balance`);
     return {
-      dustBalance: totalDust.toFixed(6),
-      totalCoins: coins.length,
-      coinsByType: getCoinsByType(coins)
+      dustBalance: '0.000000',
+      totalCoins: 0,
+      coinsByType: {}
     };
     
   } catch (error) {
     console.log(`   ⚠️ GraphQL query failed: ${error}`);
     
-    // Return empty balance on query failure
     return {
       dustBalance: '0.000000',
       totalCoins: 0,
       coinsByType: {}
     };
   }
+};
+
+/**
+ * Process balance data from any GraphQL response format
+ */
+const processBalanceData = (items: any[]): any => {
+  console.log(`   🔄 Processing ${items.length} balance items...`);
+  
+  if (items.length > 0) {
+    console.log(`   📋 Sample item structure:`, JSON.stringify(items[0], null, 2));
+  }
+  
+  let totalDust = 0;
+  const coinsByType: { [key: string]: number } = {};
+  let transactionCount = 0;
+  
+  for (const item of items) {
+    // Handle transaction-based data
+    if (item.id || item.hash) {
+      transactionCount++;
+      console.log(`   📝 Transaction ${transactionCount}:`, {
+        id: item.id,
+        hash: item.hash,
+        recipient: item.recipient, 
+        sender: item.sender,
+        value: item.value,
+        amount: item.amount,
+        status: item.status
+      });
+    }
+    
+    // Extract value/amount from various possible fields
+    const value = parseFloat(
+      item.value || 
+      item.amount || 
+      item.balance || 
+      '0'
+    );
+    
+    const type = item.type || item.currency || 'tDUST';
+    
+    if (value > 0) {
+      console.log(`   💰 Found value: ${value} ${type}`);
+      
+      if (type === 'tDUST' || type === 'DUST' || !item.type) {
+        totalDust += value;
+      }
+      
+      coinsByType[type] = (coinsByType[type] || 0) + value;
+    }
+  }
+  
+  console.log(`   💰 Final processed balance: ${totalDust.toFixed(6)} tDUST`);
+  console.log(`   📊 Total transactions: ${transactionCount}`);
+  
+  return {
+    dustBalance: totalDust.toFixed(6),
+    totalCoins: items.length,
+    transactionCount,
+    coinsByType
+  };
 };
 
 /**
