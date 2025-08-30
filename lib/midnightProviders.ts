@@ -28,13 +28,13 @@ import { NetworkId } from './addressGeneration';
 export function getNetworkId(networkType: 'local' | 'testnet' | 'mainnet' = 'local'): number {
   switch (networkType) {
     case 'local':
-      return NetworkId.DevNet;  // Using YOUR NetworkId!
+      return NetworkId.Undeployed;  // Local uses Undeployed (0x00)
     case 'testnet':
       return NetworkId.TestNet;
     case 'mainnet':
       return NetworkId.MainNet;
     default:
-      return NetworkId.DevNet;
+      return NetworkId.Undeployed;  // Default to Undeployed for local
   }
 }
 

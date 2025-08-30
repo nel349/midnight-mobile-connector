@@ -112,7 +112,7 @@ function encodeMidnightBech32m(hrp: string, data: Uint8Array): string {
 // Define our own NetworkId mapping to avoid zswap dependency
 const MIDNIGHT_NETWORK_IDS = {
   Undeployed: 0,
-  DevNet: 1, 
+  DevNet: 0, 
   TestNet: 2,
   MainNet: 3
 } as const;
@@ -120,7 +120,7 @@ const MIDNIGHT_NETWORK_IDS = {
 // NetworkId enum - use official zswap values when available
 export const NetworkId = {
   Undeployed: 0,
-  DevNet: 1,
+  DevNet: 0,
   TestNet: 2,
   MainNet: 3
 } as const;
