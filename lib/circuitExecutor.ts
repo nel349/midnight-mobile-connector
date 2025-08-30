@@ -180,6 +180,7 @@ export async function createBankContractExecutor(
     networkType,
     contractReader,
     circuitImplementations: {
+      get_contract_name: bankCircuits.get_contract_name.bind(bankCircuits),
       public_key: bankCircuits.public_key.bind(bankCircuits),
       account_exists: bankCircuits.account_exists.bind(bankCircuits),
       get_token_balance: bankCircuits.get_token_balance.bind(bankCircuits),

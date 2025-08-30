@@ -101,6 +101,7 @@ const FUNCTION_DESCRIPTIONS: Record<string, string> = {
   'grant_disclosure_permission': '🔓 Grant permission to view account details',
   'set_timestamp': '⏰ Set blockchain timestamp (admin function)',
   'account_exists': '👤 Check if an account exists and validate credentials',
+  'get_contract_name': '📝 Get contract name (simple test - no parameters)',
   'public_key': '🔑 Generate public key from private key',
 };
 

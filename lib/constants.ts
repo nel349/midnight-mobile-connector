@@ -10,7 +10,7 @@
  * ✅ CURRENT: Freshly deployed contract on local Midnight network
  * Deployed: 2025-08-30 (after Docker restart)
  */
-export const DEFAULT_CONTRACT_ADDRESS = '02002928702fc4a32642974847a11b61acf68c0d42771b29e88022f620bda070a7cc';
+export const DEFAULT_CONTRACT_ADDRESS = '02005dddcb01d0d75681ba73b17466ba0e0b36f5e38748e03d3179949faeb4a62eb1';
 
 /**
  * Network configuration constants

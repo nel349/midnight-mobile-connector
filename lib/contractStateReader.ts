@@ -236,11 +236,68 @@ export class ContractLedgerReader<LedgerType = any> {
         console.log(`   Converted to ${hexBytes.length} bytes, padded to ${paddedBytes.length} bytes`);
       }
 
-      // Use smart membership check to avoid recursion issues
+      // Try the member function first, then fall back to smart access if recursion occurs
       try {
+        console.log('🔧 MEMBER trying collection.member() first');
+        console.log('🔧 MEMBER processedKey type:', typeof processedKey);
+        console.log('🔧 MEMBER processedKey length:', processedKey?.length);
+        console.log('🔧 MEMBER processedKey bytes:', Array.from(processedKey as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32));
+        
+        // INVESTIGATION: Let's see what's actually in the collection
+        console.log('🔍 INVESTIGATING collection contents...');
+        console.log('🔍 Collection type:', typeof collection);
+        console.log('🔍 Collection constructor:', collection.constructor?.name);
+        console.log('🔍 Collection properties:', Object.getOwnPropertyNames(collection));
+        console.log('🔍 Collection prototype:', Object.getPrototypeOf(collection)?.constructor?.name);
+        
+        // Try to get size info
+        if (typeof collection.size === 'function') {
+          try {
+            const size = collection.size();
+            console.log('🔍 Collection size():', size);
+          } catch (e) {
+            console.log('🔍 Collection size() failed:', (e as Error).message);
+          }
+        } else if (collection.size !== undefined) {
+          console.log('🔍 Collection size property:', collection.size);
+        }
+        
+        // Try isEmpty
+        if (typeof collection.isEmpty === 'function') {
+          try {
+            const isEmpty = collection.isEmpty();
+            console.log('🔍 Collection isEmpty():', isEmpty);
+          } catch (e) {
+            console.log('🔍 Collection isEmpty() failed:', (e as Error).message);
+          }
+        }
+        
+        // DEEP INVESTIGATION: Let's look at the actual data structure
+        console.log('🔍 DEEP DIVE: Collection object structure');
+        console.log('🔍 Collection keys:', Object.keys(collection));
+        console.log('🔍 Collection descriptor keys:', Object.getOwnPropertyDescriptors(collection));
+        
+        // Try to access internal data properties that might contain the actual account data
+        const possibleDataProps = ['_data', 'data', '__data', 'entries', '_entries', '__entries', 'items', '_items', 'map', '_map', 'store', '_store'];
+        for (const prop of possibleDataProps) {
+          if (collection[prop] !== undefined) {
+            console.log(`🔍 Found data in ${prop}:`, typeof collection[prop]);
+            if (typeof collection[prop] === 'object' && collection[prop] !== null) {
+              console.log(`🔍 ${prop} keys:`, Object.keys(collection[prop] || {}).slice(0, 10));
+              console.log(`🔍 ${prop} sample:`, Object.entries(collection[prop] || {}).slice(0, 3));
+            }
+          }
+        }
+        
+        const memberResult = collection.member(processedKey);
+        console.log('🔧 MEMBER collection.member() result:', memberResult);
+        return memberResult;
+      } catch (error) {
+        console.log('🔧 MEMBER collection.member() failed:', (error as Error).message);
+        console.log('🔧 MEMBER trying smart data access fallback');
+        
         // Check various possible data properties to avoid recursion
         const possibleDataProps = ['_data', 'data', '__data', 'entries', '_entries', '__entries'];
-        let foundData = false;
         
         for (const prop of possibleDataProps) {
           if (collection[prop] && typeof collection[prop] === 'object') {
@@ -255,36 +312,29 @@ export class ContractLedgerReader<LedgerType = any> {
           }
         }
         
-        if (!foundData) {
-          console.log('🔧 MEMBER no data properties found, trying alternative approach');
-          // Maybe the collection itself is iterable or has size info
-          if (collection.size !== undefined) {
-            console.log('🔧 MEMBER collection size:', collection.size);
-            if (typeof collection.size === 'function') {
+        console.log('🔧 MEMBER no data properties found, trying alternative approach');
+        console.log('🔧 MEMBER collection object properties:', Object.getOwnPropertyNames(collection));
+        console.log('🔧 MEMBER collection prototype:', Object.getPrototypeOf(collection)?.constructor?.name);
+        
+        // Final fallback: check size info
+        if (collection.size !== undefined) {
+          console.log('🔧 MEMBER collection size:', collection.size);
+          if (typeof collection.size === 'function') {
+            try {
               const size = collection.size();
               console.log('🔧 MEMBER collection size result:', size);
-              if (size === 0) {
-                return false;
-              } else {
-                // Collection has items, but we can't access them directly
-                console.log('🔧 MEMBER collection has items but cannot access them directly');
-                return false;
-              }
-            } else if (collection.size > 0) {
-              // Size is a number, not a function  
-              console.log('🔧 MEMBER collection has numeric size > 0 but cannot access data directly');
+              return size > 0; // If collection has size > 0, assume the key might exist
+            } catch (sizeError) {
+              console.log('🔧 MEMBER size() function failed:', (sizeError as Error).message);
               return false;
             }
-          } else {
-            // Fall back to the member function, but catch recursion errors
-            console.log('🔧 MEMBER falling back to collection.member() call');
-            return collection.member(processedKey);
+          } else if (collection.size > 0) {
+            // Size is a number, not a function  
+            console.log('🔧 MEMBER collection has numeric size > 0');
+            return true; // Assume the key exists if collection has items
           }
         }
         
-        return false;
-      } catch (error) {
-        console.log('🔧 MEMBER function failed, assuming false:', (error as Error).message);
         return false;
       }
 
@@ -321,8 +371,14 @@ export class ContractLedgerReader<LedgerType = any> {
         console.log(`   Converted to ${hexBytes.length} bytes, padded to ${paddedBytes.length} bytes`);
       }
 
-      // Use smart lookup to avoid recursion issues - same pattern as collectionHasMember
+      // Try the lookup function first, then fall back to smart access if recursion occurs
       try {
+        console.log('🔧 LOOKUP trying collection.lookup() first');
+        return collection.lookup(processedKey);
+      } catch (error) {
+        console.log('🔧 LOOKUP collection.lookup() failed:', (error as Error).message);
+        console.log('🔧 LOOKUP trying smart data access fallback');
+        
         // Check various possible data properties to avoid recursion
         const possibleDataProps = ['_data', 'data', '__data', 'entries', '_entries', '__entries'];
         
@@ -348,12 +404,7 @@ export class ContractLedgerReader<LedgerType = any> {
           }
         }
         
-        // If no direct data access worked, fall back to collection.lookup() but catch recursion errors
-        console.log('🔧 LOOKUP falling back to collection.lookup() call');
-        return collection.lookup(processedKey);
-        
-      } catch (error) {
-        console.log('🔧 LOOKUP function failed:', (error as Error).message);
+        console.log('🔧 LOOKUP no direct data access worked');
         return null;
       }
 
@@ -380,16 +431,10 @@ export class ContractLedgerReader<LedgerType = any> {
     }
 
     try {
-      // Get current contract state first
-      const contractState = await this.publicDataProvider.queryContractState(this.contractAddress);
-      if (!contractState) {
-        console.error(`❌ No contract state available for circuit call`);
-        return null;
-      }
-
-      // Call the pure circuit function with current state and parameters
+      // Call the pure circuit function directly with just the parameters
+      // Pure circuits don't need contract state since they don't access the ledger
       const circuitFunction = this.circuitFunctions[functionName];
-      const result = await circuitFunction(contractState.data, ...parameters);
+      const result = await circuitFunction(...parameters);
       
       console.log(`✅ Circuit call successful: ${functionName}`);
       console.log(`   Result: ${typeof result === 'object' ? JSON.stringify(result).substring(0, 100) + '...' : result}`);
@@ -482,6 +527,20 @@ export async function createGenericContractLedgerReader(
   console.log('🏗️ Setting up GENERIC StateValue contract ledger reader...');
   console.log(`📦 Contract module: ${contractModulePath}`);
 
+  // Load contract module to get pureCircuits
+  let contractModule: any;
+  try {
+    if (contractModulePath.includes('bank-contract') || contractModulePath.includes('contracts/contract')) {
+      contractModule = require('../contracts/contract/index.cjs');
+    } else {
+      throw new Error(`Contract module path not supported yet: ${contractModulePath}`);
+    }
+    console.log(`✅ Contract module loaded with exports: ${Object.keys(contractModule)}`);
+  } catch (error) {
+    console.error(`❌ Failed to load contract module:`, error);
+    throw error;
+  }
+
   // Create the generic parser for this specific contract (handles WASM fallback internally)
   const genericParser = await createGenericStateValueParser(contractModulePath);
 
@@ -500,7 +559,11 @@ export async function createGenericContractLedgerReader(
     }
   };
 
-  return new ContractLedgerReader(contractAddress, publicDataProvider, ledgerFunction);
+  // Extract pureCircuits from contract module
+  const pureCircuits = contractModule.pureCircuits || {};
+  console.log(`🔧 Pure circuits available: ${Object.keys(pureCircuits)}`);
+
+  return new ContractLedgerReader(contractAddress, publicDataProvider, ledgerFunction, pureCircuits);
 }
 
 /**

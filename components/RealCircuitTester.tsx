@@ -101,13 +101,13 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
     initializeCircuitTester();
   }, [contractAddress, networkType]);
 
-  // Auto-select account_exists circuit when contract is loaded
+  // Auto-select get_contract_name circuit when contract is loaded (simple test with no parameters)
   useEffect(() => {
     if (contractMap && !selectedCircuit) {
-      const accountExistsCircuit = contractMap.all.find(c => c.name === 'account_exists');
-      if (accountExistsCircuit) {
-        console.log('🎯 Auto-selecting account_exists circuit with default values');
-        handleSelectCircuit(accountExistsCircuit);
+      const contractNameCircuit = contractMap.all.find(c => c.name === 'get_contract_name');
+      if (contractNameCircuit) {
+        console.log('🎯 Auto-selecting get_contract_name circuit (simple test)');
+        handleSelectCircuit(contractNameCircuit);
       }
     }
   }, [contractMap, selectedCircuit]);

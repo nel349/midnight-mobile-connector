@@ -57,6 +57,7 @@ export type ImpureCircuits<T> = {
 
 export type PureCircuits = {
   public_key(sk_0: Uint8Array): Uint8Array;
+  get_contract_name(): Uint8Array;
 }
 
 export type Circuits<T> = {
@@ -108,6 +109,7 @@ export type Circuits<T> = {
                  user_id_0: Uint8Array,
                  pin_0: Uint8Array): __compactRuntime.CircuitResults<T, boolean>;
   public_key(context: __compactRuntime.CircuitContext<T>, sk_0: Uint8Array): __compactRuntime.CircuitResults<T, Uint8Array>;
+  get_contract_name(context: __compactRuntime.CircuitContext<T>): __compactRuntime.CircuitResults<T, Uint8Array>;
 }
 
 export type Ledger = {
