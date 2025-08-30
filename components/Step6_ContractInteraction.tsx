@@ -15,6 +15,7 @@ import {
 } from '../lib/midnightProviders';
 import { DEFAULT_CONTRACT_ADDRESS, UI_CONSTANTS } from '../lib/constants';
 import { type ContractLedgerReader } from '../lib/contractStateReader';
+import { RealCircuitTester } from './RealCircuitTester';
 
 interface Props {
   // Can be extended to pass wallet data when needed
@@ -664,6 +665,29 @@ export default function ContractInteraction({}: Props) {
           </View>
         </View>
       )}
+
+      {/* REAL Circuit Testing Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>🚀 REAL Circuit Testing (NO MOCKS!)</Text>
+        <View style={styles.card}>
+          <Text style={styles.noteText}>
+            ⚡ Powered by actual @managed/ contract files - Built for future mobile developers!
+          </Text>
+          <RealCircuitTester 
+            networkType={networkType}
+            onCircuitCall={(circuit, parameters, result) => {
+              console.log(`REAL circuit executed: ${circuit.name}`, { 
+                circuit: circuit.name,
+                isPure: circuit.isPure,
+                category: circuit.category,
+                parameters, 
+                result 
+              });
+              // You could update lastResult state here if wanted
+            }}
+          />
+        </View>
+      </View>
 
       {/* Raw State Display */}
       {rawState && (

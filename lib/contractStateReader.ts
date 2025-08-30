@@ -132,9 +132,13 @@ export class ContractLedgerReader<LedgerType = any> {
   constructor(
     private contractAddress: string,
     private publicDataProvider: PublicDataProvider,
-    private ledgerFunction?: (stateData: any) => LedgerType
+    private ledgerFunction?: (stateData: any) => LedgerType,
+    private circuitFunctions?: Record<string, any> // Add support for pure circuit functions
   ) {
     console.log(`📖 ContractLedgerReader created for: ${contractAddress.substring(0, 20)}...`);
+    if (this.circuitFunctions) {
+      console.log(`🔧 Circuit functions available: ${Object.keys(this.circuitFunctions).join(', ')}`);
+    }
   }
 
   /**
@@ -241,6 +245,70 @@ export class ContractLedgerReader<LedgerType = any> {
       throw error;
     }
   }
+
+  /**
+   * Call a pure circuit function (read-only, no state changes)
+   * @param functionName Name of the circuit function to call
+   * @param parameters Parameters to pass to the function
+   * @returns Result of the circuit function
+   */
+  async callPureCircuit<T = any>(functionName: string, parameters: any[] = []): Promise<T | null> {
+    console.log(`🔧 Calling pure circuit: ${functionName}`);
+    console.log(`   Parameters: ${JSON.stringify(parameters)}`);
+
+    if (!this.circuitFunctions || !this.circuitFunctions[functionName]) {
+      console.error(`❌ Circuit function '${functionName}' not available`);
+      console.log(`   Available functions: ${this.circuitFunctions ? Object.keys(this.circuitFunctions).join(', ') : 'none'}`);
+      return null;
+    }
+
+    try {
+      // Get current contract state first
+      const contractState = await this.publicDataProvider.queryContractState(this.contractAddress);
+      if (!contractState) {
+        console.error(`❌ No contract state available for circuit call`);
+        return null;
+      }
+
+      // Call the pure circuit function with current state and parameters
+      const circuitFunction = this.circuitFunctions[functionName];
+      const result = await circuitFunction(contractState.data, ...parameters);
+      
+      console.log(`✅ Circuit call successful: ${functionName}`);
+      console.log(`   Result: ${typeof result === 'object' ? JSON.stringify(result).substring(0, 100) + '...' : result}`);
+      
+      return result;
+    } catch (error) {
+      console.error(`❌ Circuit call failed: ${functionName}`);
+      console.error(`   Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return null;
+    }
+  }
+
+  /**
+   * Call multiple pure circuit functions in sequence
+   * @param calls Array of {functionName, parameters} objects
+   * @returns Results array corresponding to the calls
+   */
+  async callMultiplePureCircuits(calls: Array<{functionName: string, parameters?: any[]}>): Promise<any[]> {
+    console.log(`🔧 Calling ${calls.length} pure circuits in sequence...`);
+    
+    const results: any[] = [];
+    for (const call of calls) {
+      const result = await this.callPureCircuit(call.functionName, call.parameters || []);
+      results.push(result);
+    }
+    
+    console.log(`✅ Multiple circuit calls completed: ${results.length} results`);
+    return results;
+  }
+
+  /**
+   * Get available circuit functions
+   */
+  getAvailableCircuitFunctions(): string[] {
+    return this.circuitFunctions ? Object.keys(this.circuitFunctions) : [];
+  }
 }
 
 /**
@@ -256,9 +324,10 @@ export function createIndexerPublicDataProvider(contractQuerier: any): PublicDat
 export function createContractLedgerReader<LedgerType = any>(
   contractAddress: string,
   publicDataProvider: PublicDataProvider,
-  ledgerFunction?: (stateData: any) => LedgerType
+  ledgerFunction?: (stateData: any) => LedgerType,
+  circuitFunctions?: Record<string, any>
 ): ContractLedgerReader<LedgerType> {
-  return new ContractLedgerReader(contractAddress, publicDataProvider, ledgerFunction);
+  return new ContractLedgerReader(contractAddress, publicDataProvider, ledgerFunction, circuitFunctions);
 }
 
 /**
