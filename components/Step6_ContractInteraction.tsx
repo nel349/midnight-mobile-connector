@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, Button, StyleSheet, ScrollView, Alert, TextInput } from 'react-native';
+import { Alert, Button, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { createTestnetContractClient, MidnightContractClient } from '../lib/midnightContractClient';
-import { 
-  createTestnetProviders, 
-  createLocalProviders, 
-  testProviderConnection,
+import {
+  createLocalProviders,
+  createTestnetProviders,
   queryContractState,
-  contractExists,
-  checkProviderHealth,
-  getAvailableNetworks,
+  testProviderConnection,
   type BasicMidnightProviders
 } from '../lib/midnightProviders';
 
@@ -178,11 +175,12 @@ export default function ContractInteraction({}: Props) {
         return;
       }
       
-      // Query the specific bank contract
+      // Direct query for the specific bank contract
       const bankContractAddress = '0200c79698a29be94e3b4e3f19ceb1a6f25b206cda15347e68caf15083e715a69c6a';
-      console.log(`🏦 Querying bank contract: ${bankContractAddress}`);
       
-      const contractState = await queryContractState(providers, bankContractAddress);
+      // Try to query the bank contract with correct schema
+      console.log(`🏦 Attempting to query bank contract: ${bankContractAddress}`);
+      const contractState = await providers.contractQuerier.queryActualContractState(bankContractAddress);
       
       if (contractState) {
         Alert.alert(
