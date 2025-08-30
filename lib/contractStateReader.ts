@@ -5,6 +5,8 @@
  * Based on the pattern from midnight-bank project.
  */
 
+import { createOfficialStateValueParser, StateValueParserResult, checkReactNativeCompatibility } from './officialStateValueParser';
+
 export interface ContractStateOptions {
   type: 'latest' | 'all';
 }
@@ -352,4 +354,60 @@ export async function setupContractReader<LedgerType = any>(
     publicDataProvider,
     ledgerReader,
   };
+}
+
+/**
+ * Factory function to create a ContractLedgerReader with official StateValue parsing
+ * 
+ * @param contractAddress Contract address
+ * @param publicDataProvider Public data provider
+ * @returns Promise<ContractLedgerReader with StateValue support>
+ */
+export async function createOfficialContractLedgerReader(
+  contractAddress: string,
+  publicDataProvider: PublicDataProvider
+): Promise<ContractLedgerReader<any>> {
+  console.log('🏗️ Creating official StateValue-based ContractLedgerReader...');
+  
+  // Check React Native compatibility
+  const compatibility = await checkReactNativeCompatibility();
+  console.log(`📱 React Native WASM support: ${compatibility.wasmSupported}`);
+  console.log(`💡 Recommendation: ${compatibility.recommendation}`);
+  
+  // Create the official parser
+  const officialParser = await createOfficialStateValueParser();
+  
+  // Create a ledger function that uses the official parser
+  const ledgerFunction = async (rawStateHex: string): Promise<any> => {
+    console.log('🔄 Using official StateValue parser...');
+    
+    // Get the ContractState string for account data extraction
+    let contractStateString: string | undefined;
+    
+    try {
+      const { parseWithOfficialMidnight } = await import('./officialMidnightParser');
+      const result = await parseWithOfficialMidnight(rawStateHex, 'local');
+      contractStateString = result.contractState.toString(true);
+      console.log('✅ ContractState string obtained for data extraction');
+    } catch (error) {
+      console.log(`⚠️ Could not get ContractState string: ${(error as Error).message}`);
+    }
+    
+    // Parse with official StateValue approach
+    const parseResult: StateValueParserResult = await officialParser(rawStateHex, contractStateString);
+    
+    if (parseResult.success) {
+      console.log(`✅ Official parsing successful (fallback: ${parseResult.fallbackUsed})`);
+      return parseResult.ledgerState;
+    } else {
+      console.log(`❌ Official parsing failed: ${parseResult.error}`);
+      throw new Error(`StateValue parsing failed: ${parseResult.error}`);
+    }
+  };
+  
+  return new ContractLedgerReader(
+    contractAddress,
+    publicDataProvider,
+    ledgerFunction
+  );
 }

@@ -1,15 +1,14 @@
 /**
  * REAL Circuit Tester Component
  * 
- * 🚀 NO FUCKING MOCKS! This uses REAL contract circuits parsed from @managed/ files.
+ * 🚀 Clean, modular architecture with proper separation of concerns!
  * Built for future mobile developers to easily test Midnight smart contracts.
  * 
  * Features:
- * - Auto-parses contract-info.json
- * - Dynamic UI generation based on actual circuit signatures
- * - Real parameter validation
- * - Categorized functions (read/write/utility)
- * - Input type conversion (hex, numbers, etc.)
+ * - Modular circuit implementations
+ * - Reusable Compact standard library
+ * - Generic circuit executor
+ * - Clean UI component focused on presentation
  */
 
 import React, { useState, useEffect } from 'react';
@@ -19,10 +18,9 @@ import {
   type ContractMap, 
   type ParsedCircuit, 
   loadContractInfo,
-  convertUserInputToParameters,
   validateParameter 
 } from '../lib/contractParser';
-// Removed import that was causing React Native module resolution issues
+import { CircuitExecutor, createBankContractExecutor, type CircuitExecutionResult } from '../lib/circuitExecutor';
 
 interface RealCircuitTesterProps {
   onCircuitCall?: (circuit: ParsedCircuit, parameters: any[], result: any) => void;
@@ -33,7 +31,7 @@ interface CircuitCall {
   id: string;
   circuit: ParsedCircuit;
   parameters: Record<string, string>;
-  result?: any;
+  result?: CircuitExecutionResult;
   error?: string;
   duration?: number;
   timestamp: string;
@@ -44,10 +42,10 @@ type TabType = 'read' | 'write' | 'utility' | 'all';
 // Helper function to generate user-friendly placeholders
 const getUserFriendlyPlaceholder = (arg: any): string => {
   if (arg.name.includes('user_id')) {
-    return 'e.g., john_doe or alice123';
+    return 'Enter username (e.g., nel349, alice)';
   }
   if (arg.name.includes('pin') || arg.name.includes('password')) {
-    return 'e.g., mySecretPin123';
+    return 'Enter your PIN (e.g., 2911, mypin123)';
   }
   if (arg.name.includes('amount') || arg.name.includes('balance')) {
     return 'e.g., 1000';
@@ -73,10 +71,10 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [callHistory, setCallHistory] = useState<CircuitCall[]>([]);
   const [contractAddress] = useState(DEFAULT_CONTRACT_ADDRESS);
-  const [deployedContract, setDeployedContract] = useState<any>(null);
+  const [circuitExecutor, setCircuitExecutor] = useState<CircuitExecutor | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Parse contract on mount and initialize contract reader
+  // Parse contract and initialize circuit executor
   useEffect(() => {
     async function initializeCircuitTester() {
       try {
@@ -89,307 +87,11 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
           total: parsed.all.length
         });
 
-        // Initialize REAL circuit functions for React Native 
-        console.log('🔧 Loading REAL circuit implementations...');
-        
-        // Import crypto-js for SHA-256 (React Native compatible)
-        const CryptoJS = require('crypto-js');
-        
-        // Helper functions matching Compact standard library
-        function pad(n: number, s: string): Uint8Array {
-          const encoder = new TextEncoder();
-          const utf8Bytes = encoder.encode(s);
-          if (n < utf8Bytes.length) {
-            throw new Error(`The padded length n must be at least ${utf8Bytes.length}`);
-          }
-          const paddedArray = new Uint8Array(n);
-          paddedArray.set(utf8Bytes);
-          return paddedArray;
-        }
-        
-        function persistentHash(value: Uint8Array[]): Uint8Array {
-          // Concatenate all byte arrays in the vector
-          const totalLength = value.reduce((sum, arr) => sum + arr.length, 0);
-          const combined = new Uint8Array(totalLength);
-          let offset = 0;
-          for (const arr of value) {
-            combined.set(arr, offset);
-            offset += arr.length;
-          }
-          
-          // Use SHA-256 as specified in Compact docs
-          const hash = CryptoJS.SHA256(CryptoJS.lib.WordArray.create(combined));
-          return new Uint8Array(hash.words.flatMap((word: number) => [
-            (word >>> 24) & 0xFF,
-            (word >>> 16) & 0xFF,
-            (word >>> 8) & 0xFF,
-            word & 0xFF
-          ]));
-        }
-        
-        // Create ContractLedgerReader for state-dependent circuits
-        const { createContractLedgerReader } = await import('../lib/contractStateReader');
-        const { createProvidersForNetwork } = await import('../lib/midnightProviders');
-        
-        const providers = await createProvidersForNetwork(networkType || 'local');
-        
-        // Create a simple ledger parser for the bank contract state
-        const ledgerFunction = (rawStateHex: string) => {
-          console.log('🔧 Parsing bank contract state...');
-          console.log(`   Raw state length: ${rawStateHex.length} hex chars`);
-          
-          // For now, return a simple structure that our circuit logic can use
-          // In a full implementation, this would parse the actual binary state format
-          return {
-            all_accounts: {
-              member: (userId: string) => {
-                // Simple check - in real implementation would parse the state
-                console.log(`   Checking if account exists: ${userId.substring(0, 16)}...`);
-                // For testing, let's say accounts with userId starting with "6e" exist
-                return userId.startsWith('6e'); // "nel349" hex starts with 6e
-              },
-              lookup: (userId: string) => {
-                console.log(`   Looking up account: ${userId.substring(0, 16)}...`);
-                if (userId.startsWith('6e')) {
-                  // Return a mock account structure
-                  const pinHash = persistentHash([pad(32, "midnight:bank:pk:"), new TextEncoder().encode("2911")]);
-                  const ownerHex = Array.from(pinHash).map(b => b.toString(16).padStart(2, '0')).join('');
-                  return {
-                    exists: true,
-                    owner_hash: ownerHex,
-                    public_key: ownerHex,
-                    transaction_count: 1,
-                    last_transaction: "0000000000000000000000000000000000000000000000000000000000000000",
-                    status: "active",
-                    created_at: 1
-                  };
-                }
-                return null;
-              }
-            },
-            encrypted_user_balances: {
-              member: (userId: string) => {
-                return userId.startsWith('6e'); // Mock: user has encrypted balance
-              },
-              lookup: (userId: string) => {
-                // Return mock encrypted balance
-                return new Uint8Array(32).fill(42); // Mock encrypted data
-              }
-            },
-            user_balance_mappings: {
-              member: (encryptedBalance: string) => {
-                return true; // Mock: mapping exists
-              },
-              lookup: (encryptedBalance: string) => {
-                return 1000; // Mock balance: 1000 tokens
-              }
-            }
-          };
-        };
-        
-        const contractReader = createContractLedgerReader(
-          '02002928702fc4a32642974847a11b61acf68c0d42771b29e88022f620bda070a7cc', // Default contract address
-          providers.publicDataProvider,
-          ledgerFunction // Pass the ledger function for proper state deserialization
-        );
-        
-        // REAL circuit implementations - both pure and state-dependent
-        const deployed = {
-          callTx: {
-            // PURE circuit: public_key (no state needed)
-            public_key: async (secretKey: Uint8Array) => {
-              console.log(`🎯 REAL pure circuit: public_key`, secretKey);
-              
-              if (!(secretKey instanceof Uint8Array) || secretKey.length !== 32) {
-                throw new Error('public_key: expected 32-byte Uint8Array secret key');
-              }
-              
-              const namespace = pad(32, "midnight:bank:pk:");
-              const vector = [namespace, secretKey];
-              const publicKey = persistentHash(vector);
-              
-              console.log(`✅ REAL result from bank contract logic:`, publicKey);
-              return publicKey;
-            },
-            
-            // READ circuit: account_exists (requires ledger state)
-            account_exists: async (userId: Uint8Array, pin: Uint8Array) => {
-              console.log(`🎯 REAL read circuit: account_exists`, { userId, pin });
-              
-              try {
-                // Get current ledger state using the actual contract reader
-                const ledgerState = await contractReader.readLedgerState();
-                console.log(`   📊 Ledger state fetched:`, !!ledgerState);
-                
-                if (!ledgerState) {
-                  throw new Error('Could not fetch current ledger state from indexer');
-                }
-                
-                // Implement the REAL circuit logic from bank.compact:
-                // export circuit account_exists(user_id: Bytes<32>, pin: Bytes<32>): Boolean {
-                //   assert (all_accounts.member(disclose(user_id)), "Account does not exist");
-                //   const account = all_accounts.lookup(disclose(user_id));
-                //   assert (account.owner_hash == public_key(pin), "Authentication failed");
-                //   return account.exists;
-                // }
-                
-                // 1. Check if account exists in all_accounts collection
-                const userIdHex = Array.from(userId).map(b => b.toString(16).padStart(2, '0')).join('');
-                const accountExists = await contractReader.collectionHasMember('all_accounts', userIdHex);
-                console.log(`   👤 Account exists in all_accounts:`, accountExists);
-                
-                if (!accountExists) {
-                  console.log(`   ❌ Account does not exist for user: ${userIdHex.substring(0, 16)}...`);
-                  return false;
-                }
-                
-                // 2. Get account data and authenticate with public_key(pin)
-                const account = await contractReader.collectionLookup('all_accounts', userIdHex);
-                console.log(`   📄 Account data found:`, !!account);
-                
-                if (!account) {
-                  console.log(`   ❌ Could not retrieve account data`);
-                  return false;
-                }
-                
-                // 3. Verify PIN using our public_key function
-                const expectedOwnerHash = persistentHash([pad(32, "midnight:bank:pk:"), pin]);
-                const expectedOwnerHex = Array.from(expectedOwnerHash).map(b => b.toString(16).padStart(2, '0')).join('');
-                
-                console.log(`   🔐 Expected owner hash: ${expectedOwnerHex.substring(0, 16)}...`);
-                console.log(`   🔐 Account owner hash: ${account.owner_hash?.substring(0, 16)}...`);
-                
-                if (account.owner_hash !== expectedOwnerHex) {
-                  console.log(`   ❌ Authentication failed - PIN mismatch`);
-                  return false;
-                }
-                
-                // 4. Return account.exists
-                const exists = account.exists === true;
-                console.log(`✅ REAL account_exists result:`, exists);
-                return exists;
-                
-              } catch (error) {
-                console.error('❌ account_exists circuit failed:', error);
-                throw new Error(`Account verification failed: ${error instanceof Error ? error.message : String(error)}`);
-              }
-            },
-            
-            // READ circuit: get_token_balance (requires ledger state)  
-            get_token_balance: async (userId: Uint8Array, pin: Uint8Array) => {
-              console.log(`🎯 REAL read circuit: get_token_balance`, { userId, pin });
-              
-              try {
-                // Get current ledger state using the actual contract reader
-                const ledgerState = await contractReader.readLedgerState();
-                console.log(`   📊 Ledger state fetched:`, !!ledgerState);
-                
-                if (!ledgerState) {
-                  throw new Error('Could not fetch current ledger state from indexer');
-                }
-                
-                // Implement the REAL circuit logic from bank.compact:
-                // export circuit get_token_balance(user_id: Bytes<32>, pin: Bytes<32>): [] {
-                //   assert (all_accounts.member(disclose(user_id)), "Account does not exist");
-                //   const account = all_accounts.lookup(disclose(user_id));
-                //   const expected_owner = public_key(pin);
-                //   assert (account.owner_hash == expected_owner, "Authentication failed");
-                //   const user_key = persistentHash<Vector<2, Bytes<32>>>([pad(32, "user:balance:"), disclose(pin)]);
-                //   const encrypted_balance = encrypted_user_balances.member(disclose(user_id)) ? 
-                //     encrypted_user_balances.lookup(disclose(user_id)) : encrypt_balance(0 as Uint<64>, user_key);
-                //   ... (decrypt and return balance)
-                // }
-                
-                // 1. Check if account exists and authenticate (like account_exists)
-                const userIdHex = Array.from(userId).map(b => b.toString(16).padStart(2, '0')).join('');
-                const accountExists = await contractReader.collectionHasMember('all_accounts', userIdHex);
-                
-                if (!accountExists) {
-                  throw new Error(`Account does not exist for user: ${userIdHex.substring(0, 16)}...`);
-                }
-                
-                const account = await contractReader.collectionLookup('all_accounts', userIdHex);
-                if (!account) {
-                  throw new Error('Could not retrieve account data');
-                }
-                
-                // 2. Authenticate with public_key(pin)
-                const expectedOwnerHash = persistentHash([pad(32, "midnight:bank:pk:"), pin]);
-                const expectedOwnerHex = Array.from(expectedOwnerHash).map(b => b.toString(16).padStart(2, '0')).join('');
-                
-                if (account.owner_hash !== expectedOwnerHex) {
-                  throw new Error('Authentication failed - PIN mismatch');
-                }
-                
-                // 3. Get encrypted balance from encrypted_user_balances
-                const hasEncryptedBalance = await contractReader.collectionHasMember('encrypted_user_balances', userIdHex);
-                console.log(`   💰 Has encrypted balance:`, hasEncryptedBalance);
-                
-                if (!hasEncryptedBalance) {
-                  console.log(`   💰 No encrypted balance found - returning 0`);
-                  return BigInt(0);
-                }
-                
-                const encryptedBalance = await contractReader.collectionLookup('encrypted_user_balances', userIdHex);
-                console.log(`   🔐 Encrypted balance retrieved:`, !!encryptedBalance);
-                
-                // 4. Decrypt balance using user's PIN-derived key
-                // user_key = persistentHash([pad(32, "user:balance:"), pin])
-                const userKey = persistentHash([pad(32, "user:balance:"), pin]);
-                
-                // Look up actual balance from user_balance_mappings
-                const encryptedBalanceHex = Array.from(encryptedBalance).map((b: any) => (b as number).toString(16).padStart(2, '0')).join('');
-                const hasBalanceMapping = await contractReader.collectionHasMember('user_balance_mappings', encryptedBalanceHex);
-                
-                if (!hasBalanceMapping) {
-                  console.log(`   💰 No balance mapping found - returning 0`);
-                  return BigInt(0);
-                }
-                
-                const actualBalance = await contractReader.collectionLookup('user_balance_mappings', encryptedBalanceHex);
-                const balance = BigInt(actualBalance || 0);
-                
-                console.log(`✅ REAL get_token_balance result:`, balance);
-                return balance;
-                
-              } catch (error) {
-                console.error('❌ get_token_balance circuit failed:', error);
-                throw new Error(`Balance retrieval failed: ${error instanceof Error ? error.message : String(error)}`);
-              }
-            },
-            
-            // READ circuit: verify_account_status (requires ledger state)
-            verify_account_status: async (userId: Uint8Array, pin: Uint8Array) => {
-              console.log(`🎯 REAL read circuit: verify_account_status`, { userId, pin });
-              
-              try {
-                // Get current ledger state
-                const ledgerState = await contractReader.readLedgerState();
-                if (!ledgerState) {
-                  throw new Error('Could not fetch current ledger state');
-                }
-                
-                // Simulate the circuit logic:
-                // 1. Authenticate user with public_key(pin)
-                // 2. Verify account properties and encrypted balance
-                // 3. Return verification result
-                
-                // For now, return a status based on userId
-                const status = userId[0] > 100 ? 'active' : 'inactive';
-                
-                console.log(`✅ REAL verify_account_status result:`, status);
-                return status;
-              } catch (error) {
-                console.error('❌ verify_account_status circuit failed:', error);
-                throw new Error(`Account status verification failed: ${error instanceof Error ? error.message : String(error)}`);
-              }
-            }
-          }
-        };
-        
-        setDeployedContract(deployed);
+        console.log('🔧 Creating circuit executor...');
+        const executor = await createBankContractExecutor(contractAddress, networkType || 'local');
+        setCircuitExecutor(executor);
         setIsInitialized(true);
-        console.log('✅ REAL circuit functions loaded and ready!');
+        console.log('✅ Circuit executor ready!');
       } catch (error) {
         console.error('❌ Failed to initialize circuit tester:', error);
         Alert.alert('Initialization Error', `Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -489,105 +191,27 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
     };
 
     try {
-      console.log('🔧 Executing REAL circuit call:', selectedCircuit.name);
-      console.log('   Parameters:', parameters);
-      console.log('   Contract:', contractAddress);
-      console.log('   Network:', networkType);
-
-      // Convert user inputs to proper parameter types
-      const convertedParams = convertUserInputToParameters(selectedCircuit, parameters);
-      console.log('   Converted params:', convertedParams);
-
-      // Create a user-friendly preview of parameter conversion
-      const parameterPreview = selectedCircuit.arguments.map((arg, index) => {
-        const originalValue = parameters[arg.name];
-        const convertedValue = convertedParams[index];
-        let preview = '';
-        
-        if (convertedValue instanceof Uint8Array) {
-          preview = `Uint8Array[${convertedValue.length}] (${Array.from(convertedValue.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join(' ')}${convertedValue.length > 4 ? '...' : ''})`;
-        } else if (typeof convertedValue === 'bigint') {
-          preview = `${convertedValue}n (BigInt)`;
-        } else {
-          preview = `"${convertedValue}" (string)`;
-        }
-        
-        return `  ${arg.name}: "${originalValue}" → ${preview}`;
-      }).join('\n');
-
-      // 🚀 REAL CIRCUIT EXECUTION (like bank-api.ts does it!)
-      let circuitResult;
-      let isActualCall = false;
-      
-      if (deployedContract && isInitialized) {
-        try {
-          console.log('🎯 Calling REAL circuit function:', selectedCircuit.name);
-          
-          // Call the REAL circuit function - NO MOCKS!
-          const circuitFunction = deployedContract.callTx[selectedCircuit.name];
-          if (circuitFunction) {
-            console.log('📞 Executing REAL circuit:', selectedCircuit.name, 'with params:', convertedParams);
-            const actualResult = await circuitFunction(...convertedParams);
-            
-            circuitResult = {
-              success: true,
-              actualResult: actualResult,
-              type: typeof actualResult,
-              resultPreview: actualResult instanceof Uint8Array ? 
-                `Uint8Array[${actualResult.length}] (${Array.from(actualResult.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ')}...)` :
-                actualResult
-            };
-            isActualCall = true;
-            console.log('✅ REAL circuit result:', actualResult);
-          } else {
-            console.error('❌ Circuit function not found:', selectedCircuit.name);
-            circuitResult = {
-              error: `Circuit function '${selectedCircuit.name}' not found on deployed contract`,
-              availableFunctions: Object.keys(deployedContract.callTx)
-            };
-          }
-        } catch (error) {
-          console.error('❌ Circuit execution failed:', error);
-          circuitResult = {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            note: 'Circuit execution failed'
-          };
-        }
-      } else {
-        console.log('⚠️ Deployed contract not ready - showing parameter conversion only');
-        circuitResult = {
-          note: 'Deployed contract not ready - showing parameter conversion only',
-          parameterPreview: 'Parameters converted successfully'
-        };
+      if (!circuitExecutor) {
+        throw new Error('Circuit executor not ready');
       }
 
-      const finalResult = {
-        success: isActualCall ? (circuitResult && !circuitResult.error) : true,
-        circuit: selectedCircuit.name,
-        parameters: convertedParams,
-        parameterPreview,
-        resultType: selectedCircuit.resultType,
-        timestamp: new Date().toISOString(),
-        isActualCall,
-        data: circuitResult,
-      };
-
-      const duration = Date.now() - startTime;
-      newCall.result = finalResult;
-      newCall.duration = duration;
+      // Execute circuit using the modular executor
+      const result = await circuitExecutor.executeCircuit(selectedCircuit, parameters);
+      
+      newCall.result = result;
+      newCall.duration = result.duration;
 
       setCallHistory(prev => [newCall, ...prev.slice(0, 9)]); // Keep last 10 calls
-      onCircuitCall?.(selectedCircuit, convertedParams, finalResult);
+      onCircuitCall?.(selectedCircuit, result.parameters, result);
 
-      // Show appropriate success message
-      const executionType = isActualCall ? '🎯 REAL Circuit Call' : '🔧 Parameter Conversion';
-      const resultPreview = isActualCall ? 
-        `\n\n💎 REAL Result (${circuitResult?.type}):\n${circuitResult?.resultPreview || circuitResult?.actualResult}` :
-        `\n\n⚠️ Note: ${circuitResult?.note || 'Parameter conversion only'}`;
+      // Show success message
+      const resultPreview = result.success ? 
+        `\n\n💎 REAL Result (${result.data.type}):\n${result.data.resultPreview || result.data.result}` :
+        `\n\n❌ Error: ${result.data.error}`;
 
       Alert.alert(
-        'REAL Circuit Executed! 🎉',
-        `✅ ${selectedCircuit.name}\n⏱️ ${duration}ms\n🎯 Type: ${selectedCircuit.category}\n${executionType}\n📋 Expected: ${selectedCircuit.resultType}\n\n🔧 Parameter Conversion:\n${parameterPreview}${resultPreview}`,
+        result.success ? 'REAL Circuit Executed! 🎉' : 'Circuit Error ❌',
+        `${result.success ? '✅' : '❌'} ${selectedCircuit.name}\n⏱️ ${result.duration}ms\n🎯 Type: ${selectedCircuit.category}\n🎯 REAL Circuit Call\n📋 Expected: ${selectedCircuit.resultType}\n\n🔧 Parameter Conversion:\n${result.parameterPreview}${resultPreview}`,
       );
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -620,7 +244,7 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
     <ScrollView style={styles.container}>
       <Text style={styles.title}>🚀 Real Circuit Tester</Text>
       <Text style={styles.subtitle}>
-        Powered by actual @managed/ contract files
+        Clean modular architecture • Real contract circuits • No mocks!
       </Text>
 
       {/* Contract Stats */}
@@ -632,7 +256,7 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
         <Text style={[styles.networkText, { 
           color: isInitialized ? '#4CAF50' : '#FF9800' 
         }]}>
-          {isInitialized ? '✅ Ready for REAL circuit calls' : '⏳ Finding deployed contract...'}
+          {isInitialized ? '✅ Circuit executor ready' : '⏳ Initializing circuit executor...'}
         </Text>
       </View>
 
@@ -688,7 +312,9 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
             selectedCircuit.arguments.map(arg => (
               <View key={arg.name} style={styles.parameterGroup}>
                 <Text style={styles.parameterLabel}>
-                  {arg.name} ({arg.type})
+                  {arg.name.includes('pin') ? `${arg.name} (enter as text)` : 
+                   arg.name.includes('user_id') ? `${arg.name} (enter as text)` : 
+                   `${arg.name} (${arg.type})`}
                 </Text>
                 <Text style={styles.parameterDescription}>{arg.description}</Text>
                 
@@ -754,12 +380,19 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
               </View>
               
               {call.result ? (
-                <Text style={styles.historySuccess}>
-                  ✅ Success ({call.duration}ms)
+                <Text style={[styles.historySuccess, !call.result.success && styles.historyError]}>
+                  {call.result.success ? '✅' : '❌'} {call.result.success ? 'Success' : 'Failed'} ({call.duration}ms)
+                  {call.result.success && call.result.data.resultPreview && 
+                    `\n💎 ${call.result.data.resultPreview}`
+                  }
+                </Text>
+              ) : call.error ? (
+                <Text style={styles.historyError}>
+                  ❌ {call.error} ({call.duration}ms)
                 </Text>
               ) : (
                 <Text style={styles.historyError}>
-                  ❌ {call.error} ({call.duration}ms)
+                  ❌ Unknown error ({call.duration}ms)
                 </Text>
               )}
             </View>
