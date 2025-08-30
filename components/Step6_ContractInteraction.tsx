@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, Button, StyleSheet, ScrollView, Alert, TextInput } from 'react-native';
 import { createTestnetContractClient, MidnightContractClient } from '../lib/midnightContractClient';
+import { 
+  createTestnetProviders, 
+  createLocalProviders, 
+  testProviderConnection,
+  queryContractState,
+  contractExists,
+  checkProviderHealth,
+  getAvailableNetworks,
+  type BasicMidnightProviders
+} from '../lib/midnightProviders';
 
 interface Props {
   // Can be extended to pass wallet data when needed
@@ -18,9 +28,11 @@ interface Props {
  */
 export default function ContractInteraction({}: Props) {
   const [client, setClient] = useState<MidnightContractClient | null>(null);
+  const [providers, setProviders] = useState<BasicMidnightProviders | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [contractAddress, setContractAddress] = useState('mn_contract_test1234567890abcdef');
-  const [functionName, setFunctionName] = useState('getBalance');
+  const [networkType, setNetworkType] = useState<'testnet' | 'local'>('testnet');
+  const [contractAddress, setContractAddress] = useState('0200c79698a29be94e3b4e3f19ceb1a6f25b206cda15347e68caf15083e715a69c6a');
+  const [functionName, setFunctionName] = useState('get_token_balance');
   const [parameters, setParameters] = useState('["0x123"]');
   const [isLoading, setIsLoading] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
@@ -28,20 +40,28 @@ export default function ContractInteraction({}: Props) {
   const handleInitializeClient = async () => {
     setIsLoading(true);
     try {
-      console.log('🔧 Initializing Midnight Contract Client...');
+      console.log(`🔧 Initializing Midnight Providers (${networkType})...`);
+      
+      // Initialize REAL providers based on network type
+      const midnightProviders = networkType === 'testnet' 
+        ? await createTestnetProviders() 
+        : await createLocalProviders();
+      
+      // Initialize legacy client for compatibility
       const contractClient = createTestnetContractClient();
       const networkInfo = contractClient.getNetworkInfo();
       
+      setProviders(midnightProviders);
       setClient(contractClient);
       setIsInitialized(true);
       
       Alert.alert(
-        'Client Initialized', 
-        `✅ Contract client ready\nNetwork: ${networkInfo.name}\nID: ${networkInfo.networkId}`
+        'REAL Providers Initialized', 
+        `✅ Connected to REAL Midnight infrastructure!\nNetwork: ${networkType.toUpperCase()}\nReady for contract interactions`
       );
       
     } catch (error) {
-      console.error('Contract client initialization failed:', error);
+      console.error('Provider initialization failed:', error);
       Alert.alert('Initialization Failed', `❌ ${error}`);
     } finally {
       setIsLoading(false);
@@ -49,19 +69,34 @@ export default function ContractInteraction({}: Props) {
   };
 
   const handleConnectContract = async () => {
-    if (!client) {
-      Alert.alert('Error', 'Please initialize client first');
+    if (!providers) {
+      Alert.alert('Error', 'Please initialize providers first');
       return;
     }
 
     setIsLoading(true);
     try {
-      console.log(`🔗 Connecting to contract: ${contractAddress}`);
-      await client.connectToContract(contractAddress, {}); // Empty ABI for placeholder
-      Alert.alert('Contract Connected', `✅ Connected to\n${contractAddress.substring(0, 30)}...`);
+      console.log(`🔗 Testing connection to contract: ${contractAddress}`);
+      
+      // Test the real provider connection
+      const connectionTest = await testProviderConnection(providers, contractAddress);
+      
+      if (connectionTest) {
+        // Try to query contract state
+        const state = await queryContractState(providers, contractAddress);
+        
+        Alert.alert(
+          'Contract Connection Test', 
+          state 
+            ? `✅ Contract found!\nAddress: ${contractAddress.substring(0, 30)}...`
+            : `❌ Contract not found at address\nThis is normal - contract might not exist yet`
+        );
+      } else {
+        Alert.alert('Connection Failed', '❌ Provider connection test failed');
+      }
       
     } catch (error) {
-      console.error('Contract connection failed:', error);
+      console.error('Contract connection test failed:', error);
       Alert.alert('Connection Failed', `❌ ${error}`);
     } finally {
       setIsLoading(false);
@@ -120,6 +155,66 @@ export default function ContractInteraction({}: Props) {
     } catch (error) {
       console.error('Event query failed:', error);
       Alert.alert('Query Failed', `❌ ${error}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTestBankContract = async () => {
+    if (!providers) {
+      Alert.alert('Error', 'Please initialize providers first');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('🏦 Testing connection to bank contract...');
+      
+      // Test provider connection first
+      const connectionTest = await testProviderConnection(providers);
+      
+      if (!connectionTest) {
+        Alert.alert('Connection Failed', '❌ Provider connection test failed');
+        return;
+      }
+      
+      // Query the specific bank contract
+      const bankContractAddress = '0200c79698a29be94e3b4e3f19ceb1a6f25b206cda15347e68caf15083e715a69c6a';
+      console.log(`🏦 Querying bank contract: ${bankContractAddress}`);
+      
+      const contractState = await queryContractState(providers, bankContractAddress);
+      
+      if (contractState) {
+        Alert.alert(
+          'Bank Contract Found! 🏦',
+          `✅ Successfully connected to bank contract!\n\n` +
+          `Address: ${bankContractAddress.substring(0, 20)}...\n` +
+          `Block Height: ${contractState.blockHeight || 'Unknown'}\n` +
+          `Data Length: ${contractState.data ? contractState.data.length : 0}\n\n` +
+          `This is a REAL deployed bank contract!`
+        );
+        
+        setLastResult({
+          type: 'bank_contract_query',
+          address: bankContractAddress,
+          data: contractState,
+          timestamp: new Date().toISOString()
+        });
+        
+      } else {
+        Alert.alert(
+          'Contract Query Result',
+          `❌ Bank contract not found at address\n${bankContractAddress.substring(0, 30)}...\n\n` +
+          `This could mean:\n• Contract is on a different network\n• Address format is incorrect\n• Contract was not deployed yet`
+        );
+      }
+      
+    } catch (error) {
+      console.error('Bank contract test failed:', error);
+      Alert.alert(
+        'Test Failed', 
+        `❌ Error testing bank contract:\n${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -202,14 +297,14 @@ export default function ContractInteraction({}: Props) {
 
       {/* Contract Configuration */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Contract Configuration</Text>
+        <Text style={styles.sectionTitle}>Bank Contract Configuration</Text>
         <View style={styles.card}>
           <Text style={styles.inputLabel}>Contract Address:</Text>
           <TextInput
             style={styles.textInput}
             value={contractAddress}
             onChangeText={setContractAddress}
-            placeholder="mn_contract_..."
+            placeholder="0200c796..."
             editable={!isLoading}
           />
 
@@ -218,19 +313,33 @@ export default function ContractInteraction({}: Props) {
             style={styles.textInput}
             value={functionName}
             onChangeText={setFunctionName}
-            placeholder="getBalance"
+            placeholder="get_token_balance"
             editable={!isLoading}
           />
 
-          <Text style={styles.inputLabel}>Parameters (JSON):</Text>
+          <Text style={styles.inputLabel}>Available Bank Functions:</Text>
+          <Text style={styles.availableFunctionsText}>
+            • create_account(user_id, pin, deposit_amount){'\n'}
+            • deposit(user_id, pin, amount){'\n'}
+            • withdraw(user_id, pin, amount){'\n'}
+            • get_token_balance(user_id, pin){'\n'}
+            • verify_account_status(user_id, pin)
+          </Text>
+
+          <Text style={styles.inputLabel}>Parameters (user_id, pin, etc):</Text>
           <TextInput
             style={styles.textInput}
             value={parameters}
             onChangeText={setParameters}
-            placeholder='["0x123"] or "single_param"'
+            placeholder='["user123", "pin456"] - 32-byte values needed'
             editable={!isLoading}
             multiline
           />
+          
+          <Text style={styles.noteText}>
+            ⚠️ Currently testing contract state queries only. 
+            Function calls require ZK proof generation and wallet integration.
+          </Text>
         </View>
       </View>
 
@@ -239,10 +348,19 @@ export default function ContractInteraction({}: Props) {
         <Text style={styles.sectionTitle}>Contract Actions</Text>
         <View style={styles.card}>
           <Button
-            title="🔗 Connect to Contract"
+            title="🔗 Query Contract State"
             onPress={handleConnectContract}
             disabled={!isInitialized || isLoading}
             color="#34C759"
+          />
+          
+          <View style={styles.buttonSpacer} />
+          
+          <Button
+            title="🏦 Test Bank Contract"
+            onPress={handleTestBankContract}
+            disabled={!isInitialized || isLoading}
+            color="#FF6B35"
           />
           
           <View style={styles.buttonSpacer} />
@@ -359,5 +477,23 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 4,
     color: '#333',
+  },
+  availableFunctionsText: {
+    fontSize: 11,
+    color: '#555',
+    backgroundColor: '#f8f9fa',
+    padding: 8,
+    borderRadius: 4,
+    marginBottom: 10,
+    fontFamily: 'monospace',
+  },
+  noteText: {
+    fontSize: 11,
+    color: '#856404',
+    backgroundColor: '#fff3cd',
+    padding: 8,
+    borderRadius: 4,
+    marginTop: 10,
+    fontStyle: 'italic',
   },
 });
