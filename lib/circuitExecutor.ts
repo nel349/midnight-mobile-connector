@@ -158,15 +158,15 @@ export async function createBankContractExecutor(
   
   // Import providers
   const { createProvidersForNetwork } = await import('./midnightProviders');
-  const { createOfficialContractLedgerReader } = await import('./contractStateReader');
+  const { createBankContractLedgerReader } = await import('./contractStateReader');
   
   // Create providers and contract reader
   const providers = await createProvidersForNetwork(networkType);
   
-  // Use official StateValue-based parser for maximum accuracy
-  console.log('🔧 Using official StateValue-based parser with React Native compatibility');
+  // Use generic StateValue-based parser for maximum accuracy
+  console.log('🔧 Using GENERIC StateValue-based parser with React Native compatibility');
   
-  const contractReader = await createOfficialContractLedgerReader(
+  const contractReader = await createBankContractLedgerReader(
     contractAddress,
     providers.publicDataProvider
   );

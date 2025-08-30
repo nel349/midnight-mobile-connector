@@ -22,7 +22,7 @@ import { MidnightWallet } from '../lib/midnightWallet';
 type WalletPhase = 'overview' | 'foundation' | 'seed-derivation' | 'key-derivation' | 'address-generation' | 'network-integration' | 'contract-interaction' | 'crypto-test' | 'hd-wallet';
 
 export default function WalletBuilder() {
-  const [currentPhase, setCurrentPhase] = useState<WalletPhase>('overview');
+  const [currentPhase, setCurrentPhase] = useState<WalletPhase>('contract-interaction');
   const [wallet, setWallet] = useState<MidnightWallet | null>(null);
 
   const renderPhaseContent = () => {

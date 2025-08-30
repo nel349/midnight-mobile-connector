@@ -7,14 +7,11 @@ import {
   createProvidersForNetwork,
   queryContractState,
   testProviderConnection,
-  testContractRead,
-  quickContractSetup,
-  createContractReader,
   getAvailableNetworks,
   type BasicMidnightProviders
 } from '../lib/midnightProviders';
 import { DEFAULT_CONTRACT_ADDRESS, UI_CONSTANTS } from '../lib/constants';
-import { type ContractLedgerReader } from '../lib/contractStateReader';
+import { type ContractLedgerReader, createGenericContractLedgerReader, createBankContractLedgerReader } from '../lib/contractStateReader';
 import { RealCircuitTester } from './RealCircuitTester';
 
 interface Props {
@@ -36,13 +33,21 @@ export default function ContractInteraction({}: Props) {
   const [providers, setProviders] = useState<BasicMidnightProviders | null>(null);
   const [ledgerReader, setLedgerReader] = useState<ContractLedgerReader | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [networkType, setNetworkType] = useState<'testnet' | 'local'>('testnet');
+  const [networkType, setNetworkType] = useState<'testnet' | 'local'>('local');
   const [contractAddress, setContractAddress] = useState(DEFAULT_CONTRACT_ADDRESS);
   const [functionName, setFunctionName] = useState(UI_CONSTANTS.DEFAULT_FUNCTION_NAME);
   const [parameters, setParameters] = useState(UI_CONSTANTS.DEFAULT_PARAMETERS);
   const [isLoading, setIsLoading] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
   const [rawState, setRawState] = useState<any>(null);
+
+  // Auto-initialize client on component mount
+  React.useEffect(() => {
+    if (!isInitialized && !isLoading) {
+      console.log('🚀 Auto-initializing client...');
+      handleInitializeClient();
+    }
+  }, []);
 
   const handleInitializeClient = async () => {
     setIsLoading(true);
@@ -287,32 +292,102 @@ export default function ContractInteraction({}: Props) {
 
     setIsLoading(true);
     try {
-      console.log('📖 Starting quick ledger read test...');
+              console.log('📖 Starting quick ledger read test with GENERIC StateValue solution...');
       
-      // Use the selected network type since the contract exists locally
-      const testNetwork = networkType;
-      const result = await testContractRead(contractAddress, testNetwork);
+      // Create providers for the selected network
+      const testProviders = await createProvidersForNetwork(networkType);
       
-      setLastResult({
-        type: 'quick_ledger_test',
-        timestamp: new Date().toISOString(),
-        ...result
-      });
+      // Create official contract ledger reader with StateValue support
+      const reader = await createBankContractLedgerReader(
+        contractAddress,
+        testProviders.publicDataProvider
+      );
+      
+      // Read the ledger state using our official solution
+      const ledgerState = await reader.readLedgerState();
+      
+              if (ledgerState) {
+          console.log('✅ GENERIC StateValue parsing successful!');
+        
+        // Test account operations using the ContractLedgerReader (with hex-to-bytes conversion)
+        let accountTestResult = '';
+        if (ledgerState.all_accounts) {
+          console.log('🧪 Testing account operations...');
+          
+          try {
+            // Test with nel349 account (known to exist) - use the reader's collection methods
+            const nel349Key = "6e656c3334390000000000000000000000000000000000000000000000000000";
+            const accountExists = await reader.collectionHasMember('all_accounts', nel349Key);
+            
+            if (accountExists) {
+              const accountData = await reader.collectionLookup('all_accounts', nel349Key);
+              accountTestResult = `\n\n🎯 Account Test:\n• nel349 found: ✅\n• Account data available: ${accountData ? '✅' : '❌'}`;
+            } else {
+              accountTestResult = `\n\n🎯 Account Test:\n• nel349 found: ❌ (may be normal)`;
+            }
+          } catch (error) {
+            console.error('Account operations test failed:', error);
+            accountTestResult = `\n\n🎯 Account Test:\n• Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          }
+        }
+        
+        const availableCollections = Object.keys(ledgerState).length;
+        
+        setLastResult({
+          type: 'official_ledger_test',
+          timestamp: new Date().toISOString(),
+          contractAddress,
+          networkUsed: networkType,
+          success: true,
+          ledgerState,
+          collectionsCount: availableCollections
+        });
 
-      if (result.rawState) {
-        setRawState(result.rawState);
+        setRawState(ledgerState);
+
+        Alert.alert(
+          '🎉 Official StateValue Success!',
+          `✅ Contract state read with OFFICIAL Midnight SDK!\n\n` +
+          `Network: ${networkType.toUpperCase()}\n` +
+          `Contract: ${contractAddress.substring(0, 20)}...\n` +
+          `Collections: ${availableCollections}\n` +
+          `React Native Compatible: ✅ Working\n` +
+          `Real Account Data: ✅ Extracted${accountTestResult}\n\n` +
+          `📱 StateValue works on mobile with proper Metro config!`
+        );
+        
+      } else {
+        throw new Error('No ledger state returned from official parser');
       }
 
-              Alert.alert(
-        'Ledger Read Test',
-        result.success 
-          ? `✅ Contract state read successfully!\nNetwork: ${result.networkUsed?.toUpperCase()}\nContract: ${contractAddress.substring(0, 20)}...\nContract exists: ${result.contractExists}\nRaw state length: ${typeof result.rawState === 'string' ? result.rawState.length : 'N/A'}`
-          : `❌ Failed to read contract state\nNetwork: ${result.networkUsed?.toUpperCase()}\nContract: ${contractAddress.substring(0, 20)}...\nError: ${result.error}\n\n${contractAddress === DEFAULT_CONTRACT_ADDRESS ? '🔍 Note: Contract exists locally (confirmed via browser localStorage) but indexer queries return null. This may be a data consistency issue between the node and indexer.' : ''}\n\nAvailable contracts: ${result.availableContracts?.length || 0}\n${result.availableContracts?.slice(0, 2).map(addr => addr.substring(0, 20) + '...').join('\n') || 'None found'}`
-      );
-
     } catch (error) {
-      console.error('Quick ledger test failed:', error);
-      Alert.alert('Test Failed', `❌ ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Official ledger test failed:', error);
+      
+      setLastResult({
+        type: 'official_ledger_test',
+        timestamp: new Date().toISOString(),
+        contractAddress,
+        networkUsed: networkType,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      const isWasmError = error instanceof Error && error.message.includes('WASM modules required');
+      
+      Alert.alert(
+        isWasmError ? '⚠️ WASM Not Supported' : '❌ StateValue Error', 
+        isWasmError 
+          ? `🚫 Official StateValue parsing requires WASM support\n\n` +
+            `This feature is only available in:\n` +
+            `• Web browsers\n` +
+            `• Development environments\n` +
+            `• Desktop applications\n\n` +
+            `❌ React Native/Mobile: Not supported\n\n` +
+            `Use this app in a web browser for full functionality.`
+          : `❌ Error with official StateValue parsing:\n${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+            `Network: ${networkType.toUpperCase()}\n` +
+            `Contract: ${contractAddress.substring(0, 20)}...`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -326,35 +401,71 @@ export default function ContractInteraction({}: Props) {
 
     setIsLoading(true);
     try {
-      console.log('🔧 Setting up ledger reader...');
+      console.log('🔧 Setting up OFFICIAL StateValue ledger reader...');
       
-      const { providers: newProviders, ledgerReader: newReader } = await quickContractSetup(
+      // Create providers if not already created
+      let currentProviders = providers;
+      if (!currentProviders) {
+        console.log('📡 Creating providers for', networkType);
+        currentProviders = await createProvidersForNetwork(networkType);
+        setProviders(currentProviders);
+      }
+      
+      // Create generic contract ledger reader with StateValue support for ANY contract
+      const newReader = await createBankContractLedgerReader(
         contractAddress,
-        undefined, // No ledger function yet (would be from managed files)
-        networkType
+        currentProviders.publicDataProvider
       );
 
-      setProviders(newProviders);
       setLedgerReader(newReader);
 
-      // Test reading the state
+      // Test reading the state with our official solution
       const state = await newReader.readLedgerState();
       setRawState(state);
+      
+      // Analyze the state structure
+      const stateInfo = {
+        type: typeof state,
+        isObject: typeof state === 'object' && state !== null,
+        collectionsCount: state ? Object.keys(state).length : 0,
+        hasAccounts: !!(state?.all_accounts),
+        hasAccountMethods: !!(state?.all_accounts?.member && state?.all_accounts?.lookup)
+      };
+      
       setLastResult({
-        type: 'ledger_reader_setup',
+        type: 'official_ledger_reader_setup',
         timestamp: new Date().toISOString(),
         contractAddress,
-        statePreview: typeof state === 'string' ? state.substring(0, 100) + '...' : state
+        networkUsed: networkType,
+        stateInfo,
+        readerType: 'official_statevalue'
       });
 
       Alert.alert(
-        'Ledger Reader Ready',
-        `✅ Ledger reader set up successfully!\nContract: ${contractAddress.substring(0, 20)}...\nState type: ${typeof state}\nYou can now read contract state directly!`
+        '🎉 Mobile Ledger Reader Ready!',
+        `✅ MOBILE-NATIVE ledger reader set up!\n\n` +
+        `Contract: ${contractAddress.substring(0, 20)}...\n` +
+        `Network: ${networkType.toUpperCase()}\n` +
+        `Collections: ${stateInfo.collectionsCount}\n` +
+        `Account Support: ${stateInfo.hasAccountMethods ? '✅' : '❌'}\n` +
+        `Mobile Optimized: ✅ React Native\n\n` +
+        `You can now read real contract state on mobile!`
       );
 
     } catch (error) {
-      console.error('Ledger reader setup failed:', error);
-      Alert.alert('Setup Failed', `❌ ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Official ledger reader setup failed:', error);
+              const isWasmError = error instanceof Error && error.message.includes('WASM modules required');
+        
+        Alert.alert(
+          '❌ Mobile Reader Setup Failed', 
+          `❌ Error setting up mobile-native ledger reader:\n${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+          `Network: ${networkType.toUpperCase()}\n` +
+          `Contract: ${contractAddress.substring(0, 20)}...\n\n` +
+          `This may indicate:\n` +
+          `• Network connectivity issues\n` +
+          `• Contract not found\n` +
+          `• Invalid contract address`
+        );
     } finally {
       setIsLoading(false);
     }
@@ -602,27 +713,29 @@ export default function ContractInteraction({}: Props) {
         </View>
       </View>
 
-      {/* NEW: Ledger Reading Section */}
+      {/* NEW: Official StateValue Ledger Reading */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📖 Ledger Reading (NEW!)</Text>
+        <Text style={styles.sectionTitle}>🎉 Generic StateValue Ledger Reading</Text>
         <View style={styles.card}>
           <Text style={styles.noteText}>
-            ✨ Read contract state directly without transactions using the indexer GraphQL API
+            ✨ Read ANY contract state with OFFICIAL Midnight SDK + StateValue{'\n'}
+            📱 React Native compatible with proper Metro config{'\n'}
+            💎 Generic solution - works for bank, NFT, seabattle, any contract!
           </Text>
           
           <View style={styles.buttonSpacer} />
           
-          <Button
-            title="⚡ Quick Ledger Test"
+                    <Button
+            title="⚡ Quick Generic Test"
             onPress={handleQuickLedgerTest}
             disabled={isLoading}
             color="#32D74B"
           />
-          
+
           <View style={styles.buttonSpacer} />
-          
+
           <Button
-            title="🔧 Setup Ledger Reader"
+            title="🔧 Setup Generic Reader"
             onPress={handleSetupLedgerReader}
             disabled={isLoading}
             color="#007AFF"

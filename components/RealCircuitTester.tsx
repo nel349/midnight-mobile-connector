@@ -88,7 +88,7 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
         });
 
         console.log('🔧 Creating circuit executor...');
-        const executor = await createBankContractExecutor(contractAddress, networkType || 'local');
+        const executor = await createBankContractExecutor(contractAddress, (networkType as 'local' | 'testnet') || 'local');
         setCircuitExecutor(executor);
         setIsInitialized(true);
         console.log('✅ Circuit executor ready!');
@@ -100,6 +100,17 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
 
     initializeCircuitTester();
   }, [contractAddress, networkType]);
+
+  // Auto-select account_exists circuit when contract is loaded
+  useEffect(() => {
+    if (contractMap && !selectedCircuit) {
+      const accountExistsCircuit = contractMap.all.find(c => c.name === 'account_exists');
+      if (accountExistsCircuit) {
+        console.log('🎯 Auto-selecting account_exists circuit with default values');
+        handleSelectCircuit(accountExistsCircuit);
+      }
+    }
+  }, [contractMap, selectedCircuit]);
 
   // Get circuits for current tab
   const getCircuitsForTab = (): ParsedCircuit[] => {
@@ -122,10 +133,21 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
   // Handle circuit selection
   const handleSelectCircuit = (circuit: ParsedCircuit) => {
     setSelectedCircuit(circuit);
-    // Initialize parameters with empty values
+    // Initialize parameters with default values for account_exists, empty for others
     const initialParams: Record<string, string> = {};
     circuit.arguments.forEach(arg => {
-      initialParams[arg.name] = '';
+      // Set default values for account_exists circuit
+      if (circuit.name === 'account_exists') {
+        if (arg.name === 'user_id') {
+          initialParams[arg.name] = 'nel349';
+        } else if (arg.name === 'pin') {
+          initialParams[arg.name] = '2911';
+        } else {
+          initialParams[arg.name] = '';
+        }
+      } else {
+        initialParams[arg.name] = '';
+      }
     });
     setParameters(initialParams);
     setParameterErrors({});

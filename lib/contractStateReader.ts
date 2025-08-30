@@ -5,7 +5,7 @@
  * Based on the pattern from midnight-bank project.
  */
 
-import { createOfficialStateValueParser, StateValueParserResult, checkReactNativeCompatibility } from './officialStateValueParser';
+import { createGenericStateValueParser, createBankStateValueParser, GenericStateValueParserResult, testWasmCompatibility } from './genericStateValueParser';
 
 export interface ContractStateOptions {
   type: 'latest' | 'all';
@@ -221,7 +221,72 @@ export class ContractLedgerReader<LedgerType = any> {
         return false;
       }
 
-      return collection.member(key);
+      // Convert hex string keys to Uint8Array if needed (for Bytes<32> parameters)
+      let processedKey = key;
+      if (typeof key === 'string' && key.match(/^[0-9a-fA-F]+$/)) {
+        // Looks like a hex string - convert to Uint8Array and pad to 32 bytes
+        console.log(`🔧 Converting hex string key to Uint8Array: ${key.substring(0, 16)}...`);
+        const hexBytes = key.match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || [];
+        
+        // Pad to 32 bytes (Bytes<32> requirement)
+        const paddedBytes = new Uint8Array(32);
+        paddedBytes.set(hexBytes.slice(0, 32)); // Copy up to 32 bytes, rest remain zeros
+        
+        processedKey = paddedBytes;
+        console.log(`   Converted to ${hexBytes.length} bytes, padded to ${paddedBytes.length} bytes`);
+      }
+
+      // Use smart membership check to avoid recursion issues
+      try {
+        // Check various possible data properties to avoid recursion
+        const possibleDataProps = ['_data', 'data', '__data', 'entries', '_entries', '__entries'];
+        let foundData = false;
+        
+        for (const prop of possibleDataProps) {
+          if (collection[prop] && typeof collection[prop] === 'object') {
+            console.log(`🔧 MEMBER found data in ${prop}:`, Object.keys(collection[prop]).slice(0, 10));
+            // Convert key to hex string for direct lookup
+            const hexKey = Array.from(processedKey as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
+            console.log('🔧 MEMBER checking hex key:', hexKey);
+            console.log('🔧 MEMBER available keys sample:', Object.keys(collection[prop]).slice(0, 3));
+            const memberResult = hexKey in collection[prop];
+            console.log('🔧 MEMBER direct check result:', memberResult);
+            return memberResult;
+          }
+        }
+        
+        if (!foundData) {
+          console.log('🔧 MEMBER no data properties found, trying alternative approach');
+          // Maybe the collection itself is iterable or has size info
+          if (collection.size !== undefined) {
+            console.log('🔧 MEMBER collection size:', collection.size);
+            if (typeof collection.size === 'function') {
+              const size = collection.size();
+              console.log('🔧 MEMBER collection size result:', size);
+              if (size === 0) {
+                return false;
+              } else {
+                // Collection has items, but we can't access them directly
+                console.log('🔧 MEMBER collection has items but cannot access them directly');
+                return false;
+              }
+            } else if (collection.size > 0) {
+              // Size is a number, not a function  
+              console.log('🔧 MEMBER collection has numeric size > 0 but cannot access data directly');
+              return false;
+            }
+          } else {
+            // Fall back to the member function, but catch recursion errors
+            console.log('🔧 MEMBER falling back to collection.member() call');
+            return collection.member(processedKey);
+          }
+        }
+        
+        return false;
+      } catch (error) {
+        console.log('🔧 MEMBER function failed, assuming false:', (error as Error).message);
+        return false;
+      }
 
     } catch (error) {
       console.error(`❌ Failed to check collection member:`, error);
@@ -237,14 +302,64 @@ export class ContractLedgerReader<LedgerType = any> {
       const collection = await this.readField(collectionName);
       
       if (!collection || typeof collection.lookup !== 'function') {
-        throw new Error(`Collection ${collectionName} does not have lookup() function`);
+        console.warn(`⚠️ Collection ${collectionName} does not have lookup() function`);
+        return null;
       }
 
-      return collection.lookup(key);
+      // Convert hex string keys to Uint8Array if needed (for Bytes<32> parameters)
+      let processedKey = key;
+      if (typeof key === 'string' && key.match(/^[0-9a-fA-F]+$/)) {
+        // Looks like a hex string - convert to Uint8Array and pad to 32 bytes
+        console.log(`🔧 Converting hex string key to Uint8Array for lookup: ${key.substring(0, 16)}...`);
+        const hexBytes = key.match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || [];
+        
+        // Pad to 32 bytes (Bytes<32> requirement)
+        const paddedBytes = new Uint8Array(32);
+        paddedBytes.set(hexBytes.slice(0, 32)); // Copy up to 32 bytes, rest remain zeros
+        
+        processedKey = paddedBytes;
+        console.log(`   Converted to ${hexBytes.length} bytes, padded to ${paddedBytes.length} bytes`);
+      }
+
+      // Use smart lookup to avoid recursion issues - same pattern as collectionHasMember
+      try {
+        // Check various possible data properties to avoid recursion
+        const possibleDataProps = ['_data', 'data', '__data', 'entries', '_entries', '__entries'];
+        
+        for (const prop of possibleDataProps) {
+          if (collection[prop] && typeof collection[prop] === 'object') {
+            console.log(`🔧 LOOKUP found data in ${prop}:`, Object.keys(collection[prop]).slice(0, 10));
+            // Convert key to hex string for direct lookup
+            const hexKey = Array.from(processedKey as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
+            console.log('🔧 LOOKUP checking hex key:', hexKey);
+            console.log('🔧 LOOKUP available keys sample:', Object.keys(collection[prop]).slice(0, 3));
+            
+            if (hexKey in collection[prop]) {
+              const result = collection[prop][hexKey];
+              console.log('🔧 LOOKUP SUCCESS - found account data:', typeof result);
+              if (result && typeof result === 'object') {
+                console.log('🔧 LOOKUP account properties:', Object.keys(result));
+              }
+              return result;
+            } else {
+              console.log('🔧 LOOKUP key not found in direct data access');
+              return null;
+            }
+          }
+        }
+        
+        // If no direct data access worked, fall back to collection.lookup() but catch recursion errors
+        console.log('🔧 LOOKUP falling back to collection.lookup() call');
+        return collection.lookup(processedKey);
+        
+      } catch (error) {
+        console.log('🔧 LOOKUP function failed:', (error as Error).message);
+        return null;
+      }
 
     } catch (error) {
       console.error(`❌ Failed to lookup collection item:`, error);
-      throw error;
+      return null;
     }
   }
 
@@ -357,57 +472,43 @@ export async function setupContractReader<LedgerType = any>(
 }
 
 /**
- * Factory function to create a ContractLedgerReader with official StateValue parsing
- * 
- * @param contractAddress Contract address
- * @param publicDataProvider Public data provider
- * @returns Promise<ContractLedgerReader with StateValue support>
+ * Create GENERIC contract ledger reader using StateValue (works for ANY contract)
  */
-export async function createOfficialContractLedgerReader(
+export async function createGenericContractLedgerReader(
+  contractAddress: string,
+  publicDataProvider: PublicDataProvider,
+  contractModulePath: string = '../contracts/contract/index.cjs'
+): Promise<ContractLedgerReader<any>> {
+  console.log('🏗️ Setting up GENERIC StateValue contract ledger reader...');
+  console.log(`📦 Contract module: ${contractModulePath}`);
+
+  // Create the generic parser for this specific contract (handles WASM fallback internally)
+  const genericParser = await createGenericStateValueParser(contractModulePath);
+
+  const ledgerFunction = async (rawStateHex: string): Promise<any> => {
+    console.log('🔄 Using GENERIC StateValue parser (works for ANY contract)...');
+
+    // Use the generic parser - no hardcoded logic!
+    const parseResult: GenericStateValueParserResult = await genericParser(rawStateHex, 'local');
+
+    if (parseResult.success) {
+      console.log(`✅ GENERIC parsing successful for contract type: ${parseResult.contractType}`);
+      return parseResult.ledgerState;
+    } else {
+      console.log(`❌ GENERIC StateValue parsing failed: ${parseResult.error}`);
+      throw new Error(`GENERIC StateValue parsing failed: ${parseResult.error}`);
+    }
+  };
+
+  return new ContractLedgerReader(contractAddress, publicDataProvider, ledgerFunction);
+}
+
+/**
+ * Convenience function for bank contract (but using generic approach)
+ */
+export async function createBankContractLedgerReader(
   contractAddress: string,
   publicDataProvider: PublicDataProvider
 ): Promise<ContractLedgerReader<any>> {
-  console.log('🏗️ Creating official StateValue-based ContractLedgerReader...');
-  
-  // Check React Native compatibility
-  const compatibility = await checkReactNativeCompatibility();
-  console.log(`📱 React Native WASM support: ${compatibility.wasmSupported}`);
-  console.log(`💡 Recommendation: ${compatibility.recommendation}`);
-  
-  // Create the official parser
-  const officialParser = await createOfficialStateValueParser();
-  
-  // Create a ledger function that uses the official parser
-  const ledgerFunction = async (rawStateHex: string): Promise<any> => {
-    console.log('🔄 Using official StateValue parser...');
-    
-    // Get the ContractState string for account data extraction
-    let contractStateString: string | undefined;
-    
-    try {
-      const { parseWithOfficialMidnight } = await import('./officialMidnightParser');
-      const result = await parseWithOfficialMidnight(rawStateHex, 'local');
-      contractStateString = result.contractState.toString(true);
-      console.log('✅ ContractState string obtained for data extraction');
-    } catch (error) {
-      console.log(`⚠️ Could not get ContractState string: ${(error as Error).message}`);
-    }
-    
-    // Parse with official StateValue approach
-    const parseResult: StateValueParserResult = await officialParser(rawStateHex, contractStateString);
-    
-    if (parseResult.success) {
-      console.log(`✅ Official parsing successful (fallback: ${parseResult.fallbackUsed})`);
-      return parseResult.ledgerState;
-    } else {
-      console.log(`❌ Official parsing failed: ${parseResult.error}`);
-      throw new Error(`StateValue parsing failed: ${parseResult.error}`);
-    }
-  };
-  
-  return new ContractLedgerReader(
-    contractAddress,
-    publicDataProvider,
-    ledgerFunction
-  );
+  return createGenericContractLedgerReader(contractAddress, publicDataProvider, '../contracts/contract/index.cjs');
 }

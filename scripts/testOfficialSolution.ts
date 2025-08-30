@@ -2,7 +2,7 @@
  * Test the complete official StateValue solution
  */
 import { createProvidersForNetwork } from '../lib/midnightProviders';
-import { createOfficialContractLedgerReader } from '../lib/contractStateReader';
+import { createBankContractLedgerReader } from '../lib/contractStateReader';
 import { DEFAULT_CONTRACT_ADDRESS } from '../lib/constants';
 
 async function testOfficialSolution() {
@@ -17,7 +17,7 @@ async function testOfficialSolution() {
     
     // Create official contract ledger reader
     console.log('\n🏗️ === STEP 2: CREATE OFFICIAL CONTRACT READER ===');
-    const contractReader = await createOfficialContractLedgerReader(
+    const contractReader = await createBankContractLedgerReader(
       DEFAULT_CONTRACT_ADDRESS,
       providers.publicDataProvider
     );
