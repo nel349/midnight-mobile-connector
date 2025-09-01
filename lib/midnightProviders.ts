@@ -741,12 +741,14 @@ export async function createLocalProviders<StateId extends string = string, Stat
  * Create providers for a specific network type
  */
 export async function createProvidersForNetwork<StateId extends string = string, State = any>(
-  networkType: 'testnet' | 'local'
+  networkType: 'testnet' | 'local' | 'mainnet'
 ): Promise<BasicMidnightProviders> {
   console.log(`🌐 Creating providers for ${networkType} network...`);
   
   const config = networkType === 'testnet' 
-    ? createTestnetProvidersConfig() 
+    ? createTestnetProvidersConfig()
+    : networkType === 'mainnet'
+    ? createTestnetProvidersConfig() // Use testnet config for mainnet as placeholder
     : createLocalProvidersConfig();
     
   const providers = await createBasicProviders<StateId, State>(config);

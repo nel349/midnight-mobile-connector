@@ -128,6 +128,7 @@ export const NetworkId = {
 export interface MidnightAddress {
   address: string;
   network: string;
+  role: string;
   coinPublicKey: string;
   encryptionPublicKey: string;
 }
@@ -214,6 +215,7 @@ const generateProperMidnightAddressFixed = (keyPair: MidnightKeyPair, network: {
     return {
       address,
       network: network.name,
+      role: keyPair.role,
       coinPublicKey: keyPair.coinPublicKey,
       encryptionPublicKey: keyPair.encryptionPublicKey
     };
@@ -237,6 +239,7 @@ const generateProperMidnightAddressFixed = (keyPair: MidnightKeyPair, network: {
     return {
       address: fallbackAddress,
       network: network.name,
+      role: keyPair.role,
       coinPublicKey: keyPair.coinPublicKey,
       encryptionPublicKey: keyPair.encryptionPublicKey
     };

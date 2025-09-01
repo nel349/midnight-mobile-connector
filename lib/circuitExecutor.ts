@@ -15,7 +15,7 @@ import { type ParsedCircuit, convertUserInputToParameters } from './contractPars
  */
 export interface CircuitExecutionContext {
   contractAddress: string;
-  networkType: 'local' | 'testnet';
+  networkType: 'local' | 'testnet' | 'mainnet';
   contractReader: ContractLedgerReader;
   circuitImplementations: any; // Generic circuit implementations
 }
@@ -118,6 +118,38 @@ export class CircuitExecutor {
   }
 
   /**
+   * Convenience method to execute a circuit by name with simple parameters
+   * 
+   * @param circuitName - Circuit name as string
+   * @param parameters - Simple parameters array (empty for parameterless circuits)
+   * @returns Circuit execution result
+   */
+  async executeCircuitByName(
+    circuitName: string, 
+    parameters: any[] = []
+  ): Promise<CircuitExecutionResult> {
+    console.log(`🔧 Executing circuit by name: ${circuitName}`);
+    
+    // Create a minimal ParsedCircuit for the known circuit
+    const circuit: ParsedCircuit = {
+      name: circuitName,
+      isPure: true,
+      arguments: [], // Simple circuits like get_contract_name have no params
+      resultType: 'string',
+      category: 'read',
+      description: `Circuit: ${circuitName}`
+    };
+    
+    // Convert simple parameters to the expected Record format
+    const userParameters: Record<string, string> = {};
+    parameters.forEach((param, index) => {
+      userParameters[`param${index}`] = String(param);
+    });
+    
+    return await this.executeCircuit(circuit, userParameters);
+  }
+
+  /**
    * Create a user-friendly preview of parameter conversion
    */
   private createParameterPreview(
@@ -152,7 +184,7 @@ export class CircuitExecutor {
  */
 export async function createBankContractExecutor(
   contractAddress: string,
-  networkType: 'local' | 'testnet' = 'local'
+  networkType: 'local' | 'testnet' | 'mainnet' = 'local'
 ): Promise<CircuitExecutor> {
   console.log('🔧 Creating bank contract circuit executor...');
   

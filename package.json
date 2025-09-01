@@ -9,6 +9,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "update-contract": "cd ../midnight-bank/bank-contract && npm run build && cd - && cp -Rf ../midnight-bank/bank-contract/dist/managed/bank/compiler ./contracts/ && cp -Rf ../midnight-bank/bank-contract/dist/managed/bank/contract ./contracts/"
   },
   "dependencies": {
@@ -62,10 +66,14 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@types/jsdom": "^21.1.7",
     "@types/react": "~19.0.10",
+    "@vitest/ui": "^3.2.4",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
-    "typescript": "~5.8.3"
+    "jsdom": "^26.1.0",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.4"
   },
   "private": true
 }
