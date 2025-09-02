@@ -83,17 +83,17 @@ export default function ContractInteraction({}: Props) {
       setClient(contractClient);
       setIsInitialized(true);
       
-      const networkDetails = getAvailableNetworks().find(n => n.key === networkType);
+      // const networkDetails = getAvailableNetworks().find(n => n.key === networkType);
       
-      Alert.alert(
-        'Providers Initialized', 
-        `✅ Connected to Midnight infrastructure!\n\n` +
-        `Network: ${networkType.toUpperCase()}\n` +
-        `Indexer: ${networkDetails?.details.indexer}\n` +
-        `Proof Server: ${networkDetails?.details.proofServer}\n` +
-        `Node: ${networkDetails?.details.node}\n\n` +
-        `Ready for contract interactions!`
-      );
+      // Alert.alert(
+      //   'Providers Initialized', 
+      //   `✅ Connected to Midnight infrastructure!\n\n` +
+      //   `Network: ${networkType.toUpperCase()}\n` +
+      //   `Indexer: ${networkDetails?.details.indexer}\n` +
+      //   `Proof Server: ${networkDetails?.details.proofServer}\n` +
+      //   `Node: ${networkDetails?.details.node}\n\n` +
+      //   `Ready for contract interactions!`
+      // );
       
     } catch (error) {
       console.error('Provider initialization failed:', error);

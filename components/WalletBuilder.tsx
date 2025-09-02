@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, Button, StyleSheet, ScrollView } from 'react-native';
 import Step1_BasicCrypto from './Step1_BasicCrypto';
 import Step2_SeedDerivation from './Step2_SeedDerivation';
+import Step2_MnemonicTest from './Step2_MnemonicTest';
+import LaceCompatibilityTest from './LaceCompatibilityTest';
 import Step3_KeyDerivation from './Step3_KeyDerivation';
 import Step4_AddressGeneration from './Step4_AddressGeneration';
 import Step5_NetworkIntegration from './Step5_NetworkIntegration';
@@ -19,7 +21,7 @@ import { MidnightWallet } from '../lib/midnightWallet';
  * Phase 5: Network Integration 🌐 (Testnet connection)
  */
 
-type WalletPhase = 'overview' | 'foundation' | 'seed-derivation' | 'key-derivation' | 'address-generation' | 'network-integration' | 'contract-interaction' | 'crypto-test' | 'hd-wallet';
+type WalletPhase = 'overview' | 'foundation' | 'seed-derivation' | 'key-derivation' | 'address-generation' | 'network-integration' | 'contract-interaction' | 'crypto-test' | 'hd-wallet' | 'mnemonic-test' | 'lace-compatibility';
 
 export default function WalletBuilder() {
   const [currentPhase, setCurrentPhase] = useState<WalletPhase>('contract-interaction');
@@ -49,6 +51,8 @@ export default function WalletBuilder() {
               <Text style={styles.phaseTitle}>Testing Tools:</Text>
               <Text style={styles.phaseItem}>🔐 Crypto Test (Ed25519 + X25519 algorithms)</Text>
               <Text style={styles.phaseItem}>⭐ HD Wallet (BIP39 seed derivation)</Text>
+              <Text style={styles.phaseItem}>🎲 Mnemonic Test (BIP39 phrase generation & validation)</Text>
+              <Text style={styles.phaseItem}>🔍 Lace Analysis (Derivation path compatibility testing)</Text>
             </View>
 
             <View style={styles.statusContainer}>
@@ -152,6 +156,28 @@ export default function WalletBuilder() {
           </View>
         );
 
+      case 'mnemonic-test':
+        return (
+          <View style={styles.phaseContent}>
+            <Text style={styles.phaseTitle}>🎲 Mnemonic Phrase Testing</Text>
+            <Text style={styles.phaseDescription}>
+              Generate and validate BIP39 mnemonic phrases. Compatible with Lace wallet.
+            </Text>
+            <Step2_MnemonicTest />
+          </View>
+        );
+
+      case 'lace-compatibility':
+        return (
+          <View style={styles.phaseContent}>
+            <Text style={styles.phaseTitle}>🔍 Lace Compatibility Analysis</Text>
+            <Text style={styles.phaseDescription}>
+              Compare derivation strategies to find exact match with Lace wallet addresses.
+            </Text>
+            <LaceCompatibilityTest />
+          </View>
+        );
+
       default:
         return null;
     }
@@ -172,6 +198,8 @@ export default function WalletBuilder() {
             { id: 'contract-interaction', label: 'Contract Interaction', icon: '📄' },
             { id: 'crypto-test', label: 'Crypto Test', icon: '🔐' },
             { id: 'hd-wallet', label: 'HD Wallet', icon: '⭐' },
+            { id: 'mnemonic-test', label: 'Mnemonic Test', icon: '🎲' },
+            { id: 'lace-compatibility', label: 'Lace Analysis', icon: '🔍' },
           ].map((phase) => (
             <View key={phase.id} style={styles.navButton}>
               <Button

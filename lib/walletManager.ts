@@ -8,6 +8,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MidnightWallet, createWalletFromSeed, generateWallet } from './midnightWallet';
 import { NETWORK_TYPES } from './constants';
+import { mnemonicToSeedBytes, validateMnemonicPhrase } from './mnemonicUtils';
 // Use explicit network type instead of importing from networkConnection
 type NetworkType = 'undeployed' | 'testnet' | 'mainnet';
 
@@ -179,6 +180,24 @@ export class WalletManager {
     
     console.log(`   ✅ Created wallet: ${name} (${walletId})`);
     return storedWallet;
+  }
+
+  /**
+   * Import wallet from mnemonic phrase
+   */
+  async importWalletFromMnemonic(name: string, mnemonic: string, passphrase: string = '', network: NetworkType = NETWORK_TYPES.TESTNET): Promise<StoredWallet> {
+    console.log(`💼 Importing wallet from mnemonic: ${name}`);
+    
+    if (!this.canAddWallet()) {
+      throw new Error(`Maximum ${this.store.maxWallets} wallets allowed`);
+    }
+
+    if (!validateMnemonicPhrase(mnemonic)) {
+      throw new Error('Invalid mnemonic phrase');
+    }
+
+    const seedBytes = await mnemonicToSeedBytes(mnemonic, passphrase);
+    return this.importWallet(name, seedBytes, network);
   }
 
   /**

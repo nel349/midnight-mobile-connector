@@ -63,13 +63,14 @@ describe('HD Wallet Generation (Step 3)', () => {
       wallet = await generateWallet();
     });
 
-    it('should generate key pairs for multiple roles', () => {
-      expect(wallet.keyPairs.length).toBeGreaterThan(1);
+    it('should generate key pair for NightExternal role (Lace compatible)', () => {
+      // After Lace compatibility changes, we only generate NightExternal role
+      expect(wallet.keyPairs.length).toBe(1);
       
-      // Check that we have at least some expected roles
+      // Check that we have the NightExternal role (the only one Lace uses)
       const roleNames = wallet.keyPairs.map(kp => kp.role);
       expect(roleNames).toContain('NightExternal');
-      expect(roleNames).toContain('Dust');
+      expect(roleNames[0]).toBe('NightExternal');
     });
 
     it('should have valid Ed25519 coin keys', () => {
