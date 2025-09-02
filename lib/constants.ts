@@ -13,6 +13,33 @@
 export const DEFAULT_CONTRACT_ADDRESS = '02005dddcb01d0d75681ba73b17466ba0e0b36f5e38748e03d3179949faeb4a62eb1';
 
 /**
+ * Network type constants to avoid magic strings
+ */
+export const NETWORK_TYPES = {
+  TESTNET: 'testnet',
+  UNDEPLOYED: 'undeployed',
+  MAINNET: 'mainnet'
+} as const;
+
+/**
+ * Network display names (for UI)
+ */
+export const NETWORK_NAMES = {
+  testnet: 'TestNet',
+  undeployed: 'Undeployed',
+  mainnet: 'MainNet'
+} as const;
+
+/**
+ * Network names for address formatting (lowercase)
+ */
+export const NETWORK_ADDRESS_NAMES = {
+  testnet: 'test',
+  undeployed: 'undeployed',
+  mainnet: 'mainnet'
+} as const;
+
+/**
  * Network configuration constants
  */
 export const NETWORK_CONSTANTS = {

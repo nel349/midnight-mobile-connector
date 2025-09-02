@@ -13,8 +13,9 @@ import {
   createContractLedgerReader,
   setupContractReader,
 } from './contractStateReader';
-import { NETWORK_CONSTANTS, DEFAULT_CONTRACT_ADDRESS } from './constants';
+import { NETWORK_CONSTANTS, DEFAULT_CONTRACT_ADDRESS, NETWORK_TYPES } from './constants';
 import { NetworkId } from './addressGeneration';
+import { NetworkType } from './networkConnection';
 
 /**
  * 🚀 USING YOUR EXISTING NETWORK ID INTERFACE - NO BULLSHIT!
@@ -25,16 +26,16 @@ import { NetworkId } from './addressGeneration';
 /**
  * Convert network type to network ID using YOUR existing interface
  */
-export function getNetworkId(networkType: 'local' | 'testnet' | 'mainnet' = 'local'): number {
+export function getNetworkId(networkType: 'undeployed' | 'testnet' | 'mainnet' = NETWORK_TYPES.UNDEPLOYED): number {
   switch (networkType) {
-    case 'local':
-      return NetworkId.Undeployed;  // Local uses Undeployed (0x00)
-    case 'testnet':
+    case NETWORK_TYPES.UNDEPLOYED:
+      return NetworkId.Undeployed;  // Undeployed network (0x00)
+    case NETWORK_TYPES.TESTNET:
       return NetworkId.TestNet;
-    case 'mainnet':
+    case NETWORK_TYPES.MAINNET:
       return NetworkId.MainNet;
     default:
-      return NetworkId.Undeployed;  // Default to Undeployed for local
+      return NetworkId.Undeployed;  // Default to Undeployed
   }
 }
 
@@ -52,7 +53,7 @@ export function networkIdToHex(networkId: number): string {
  * 
  * 🚀 USING OUR CUSTOM IMPLEMENTATION - NO DEPENDENCIES!
  */
-export function prependNetworkIdHex(contractAddress: string, networkType: 'local' | 'testnet' | 'mainnet' = 'local'): string {
+export function prependNetworkIdHex(contractAddress: string, networkType: 'undeployed' | 'testnet' | 'mainnet' = NETWORK_TYPES.UNDEPLOYED): string {
   try {
     const networkId = getNetworkId(networkType);
     const networkHex = networkIdToHex(networkId);
@@ -158,7 +159,7 @@ export class ReactNativeContractQuerier {
   }
 
   // Enhanced query that includes contract state data for ledger reading
-  async queryContractStateWithData(contractAddress: string, networkType: 'local' | 'testnet' | 'mainnet' = 'local'): Promise<any> {
+  async queryContractStateWithData(contractAddress: string, networkType: NetworkType = NETWORK_TYPES.UNDEPLOYED): Promise<any> {
     console.log(`📡 Querying contract state with data: ${contractAddress.substring(0, 20)}...`);
     
     // 🔧 KEY FIX: Use network ID prefixed address (same as official indexer provider)
@@ -333,7 +334,7 @@ export class ReactNativeContractQuerier {
     }
   }
 
-  async queryActualContractState(contractAddress: string, networkType: 'local' | 'testnet' | 'mainnet' = 'local'): Promise<any> {
+  async queryActualContractState(contractAddress: string, networkType: NetworkType = NETWORK_TYPES.UNDEPLOYED): Promise<any> {
     console.log(`📡 Attempting to query contract with common field names...`);
     
     // Use the discovered schema with correct type names
@@ -741,13 +742,13 @@ export async function createLocalProviders<StateId extends string = string, Stat
  * Create providers for a specific network type
  */
 export async function createProvidersForNetwork<StateId extends string = string, State = any>(
-  networkType: 'testnet' | 'local' | 'mainnet'
+  networkType: 'testnet' | 'undeployed' | 'mainnet'
 ): Promise<BasicMidnightProviders> {
   console.log(`🌐 Creating providers for ${networkType} network...`);
   
-  const config = networkType === 'testnet' 
+  const config = networkType === NETWORK_TYPES.TESTNET 
     ? createTestnetProvidersConfig()
-    : networkType === 'mainnet'
+    : networkType === NETWORK_TYPES.MAINNET
     ? createTestnetProvidersConfig() // Use testnet config for mainnet as placeholder
     : createLocalProvidersConfig();
     
@@ -850,7 +851,7 @@ export async function checkProviderHealth(providers: BasicMidnightProviders): Pr
 export function getAvailableNetworks() {
   return [
     {
-      key: 'testnet' as const,
+      key: NETWORK_TYPES.TESTNET,
       name: 'TestNet-02',
       description: 'Official Midnight TestNet + Local Proof Server',
       config: createTestnetProvidersConfig(),
@@ -861,7 +862,7 @@ export function getAvailableNetworks() {
       }
     },
     {
-      key: 'local' as const,
+      key: NETWORK_TYPES.UNDEPLOYED,
       name: 'Local Development', 
       description: 'Full local Midnight node + Local Proof Server',
       config: createLocalProvidersConfig(),
@@ -897,7 +898,7 @@ export async function createContractReader<LedgerType = any>(
 export async function quickContractSetup<LedgerType = any>(
   contractAddress: string,
   ledgerFunction?: (stateData: any) => LedgerType,
-  networkType: 'testnet' | 'local' = 'testnet'
+  networkType: 'testnet' | 'undeployed' = NETWORK_TYPES.TESTNET
 ): Promise<{
   providers: BasicMidnightProviders;
   ledgerReader: ContractLedgerReader<LedgerType>;
@@ -920,7 +921,7 @@ export async function quickContractSetup<LedgerType = any>(
  */
 export async function testContractRead(
   contractAddress: string,
-  networkType: 'testnet' | 'local' = 'testnet'
+  networkType: 'testnet' | 'undeployed' = NETWORK_TYPES.TESTNET
 ): Promise<{
   success: boolean;
   contractExists: boolean;

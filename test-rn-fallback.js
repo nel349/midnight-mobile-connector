@@ -12,7 +12,7 @@ async function testReactNativeFallback() {
     console.log('✅ Parser created');
     
     // Test parsing with dummy data
-    const result = await parser('0000000000000000', 'local');
+    const result = await parser('0000000000000000', 'undeployed');
     console.log('✅ Parser execution successful');
     console.log('Result:', result.success);
     

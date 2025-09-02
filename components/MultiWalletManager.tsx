@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Button, StyleSheet, ScrollView, Alert, TextInput, Clipboard } from 'react-native';
 import { walletManager, WalletStore, StoredWallet, WalletThemes } from '../lib/walletManager';
-import { NetworkType, connectWalletToNetwork, ConnectedWallet } from '../lib/networkConnection';
+import { NETWORK_TYPES, NETWORK_NAMES } from '../lib/constants';
+// Use explicit network type instead of importing from networkConnection
+type NetworkType = 'undeployed' | 'testnet' | 'mainnet';
 import { generateWalletAddresses, MidnightAddress } from '../lib/addressGeneration';
 // Viewing key imports commented out pending forum response
 // import { deriveViewingKeyFromSeed } from '../lib/viewingKeyDerivation';  
@@ -40,7 +42,7 @@ export default function MultiWalletManager() {
   
   // Create wallet form
   const [newWalletName, setNewWalletName] = useState('');
-  const [selectedNetwork, setSelectedNetwork] = useState<NetworkType>('testnet');
+  const [selectedNetwork, setSelectedNetwork] = useState<NetworkType>(NETWORK_TYPES.TESTNET);
   
   // Import wallet form
   const [importWalletName, setImportWalletName] = useState('');
@@ -472,7 +474,7 @@ export default function MultiWalletManager() {
 
           <Text style={styles.formLabel}>Network:</Text>
           <View style={styles.networkSelector}>
-            {(['testnet', 'undeployed', 'mainnet'] as NetworkType[]).map((network) => (
+            {([NETWORK_TYPES.TESTNET, NETWORK_TYPES.UNDEPLOYED, NETWORK_TYPES.MAINNET] as NetworkType[]).map((network) => (
               <Button
                 key={network}
                 title={network}
@@ -531,7 +533,7 @@ export default function MultiWalletManager() {
 
           <Text style={styles.formLabel}>Network:</Text>
           <View style={styles.networkSelector}>
-            {(['testnet', 'undeployed', 'mainnet'] as NetworkType[]).map((network) => (
+            {([NETWORK_TYPES.TESTNET, NETWORK_TYPES.UNDEPLOYED, NETWORK_TYPES.MAINNET] as NetworkType[]).map((network) => (
               <Button
                 key={network}
                 title={network}
@@ -619,9 +621,9 @@ function ReceiveAddressDisplay({ wallet }: { wallet: StoredWallet }) {
       console.log(`📥 Generating addresses for wallet: ${wallet.metadata.name}`);
       
       // Generate addresses for the wallet's network
-      const networkType = wallet.metadata.network === 'testnet' ? 'TestNet' : 
-                         wallet.metadata.network === 'undeployed' ? 'Undeployed' :
-                         wallet.metadata.network === 'mainnet' ? 'MainNet' : 'TestNet';
+      const networkType = wallet.metadata.network === NETWORK_TYPES.TESTNET ? NETWORK_NAMES.testnet : 
+                         wallet.metadata.network === NETWORK_TYPES.UNDEPLOYED ? NETWORK_NAMES.undeployed :
+                         wallet.metadata.network === NETWORK_TYPES.MAINNET ? NETWORK_NAMES.mainnet : NETWORK_NAMES.testnet;
       
       const walletAddresses = await generateWalletAddresses(wallet.wallet.keyPairs, networkType);
       setAddresses(walletAddresses);

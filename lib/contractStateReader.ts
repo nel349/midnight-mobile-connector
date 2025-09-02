@@ -548,7 +548,7 @@ export async function createGenericContractLedgerReader(
     console.log('🔄 Using GENERIC StateValue parser (works for ANY contract)...');
 
     // Use the generic parser - no hardcoded logic!
-    const parseResult: GenericStateValueParserResult = await genericParser(rawStateHex, 'local');
+    const parseResult: GenericStateValueParserResult = await genericParser(rawStateHex, 'undeployed');
 
     if (parseResult.success) {
       console.log(`✅ GENERIC parsing successful for contract type: ${parseResult.contractType}`);

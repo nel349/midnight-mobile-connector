@@ -11,7 +11,7 @@ import {
   quickContractSetup,
   createTestnetProviders,
 } from '../lib/midnightProviders';
-import { DEFAULT_CONTRACT_ADDRESS } from '../lib/constants';
+import { DEFAULT_CONTRACT_ADDRESS, NETWORK_TYPES } from '../lib/constants';
 
 interface LedgerTestState {
   loading: boolean;
@@ -55,7 +55,7 @@ export function LedgerReaderTest() {
     try {
       console.log('🧪 Starting basic contract read test...');
       
-      const result = await testContractRead(state.contractAddress, 'testnet');
+      const result = await testContractRead(state.contractAddress, NETWORK_TYPES.TESTNET);
       
       setState(prev => ({
         ...prev,

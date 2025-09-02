@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { generateWalletAddresses, type MidnightAddress, MidnightNetworks } from '../../lib/addressGeneration';
 import { generateWallet, type MidnightWallet } from '../../lib/midnightWallet';
+import { NETWORK_ADDRESS_NAMES } from '../../lib/constants';
 
 describe('Address Generation (Step 4)', () => {
   let wallet: MidnightWallet;
@@ -42,16 +43,16 @@ describe('Address Generation (Step 4)', () => {
       
       addresses.forEach(addr => {
         expect(addr.address).toMatch(/^mn_shield-addr_mainnet1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$/);
-        expect(addr.network).toBe('mainnet'); // Network uses lowercase name
+        expect(addr.network).toBe(NETWORK_ADDRESS_NAMES.mainnet); // Network uses address format name
       });
     });
 
     it('should generate DevNet addresses', async () => {
-      const addresses = await generateWalletAddresses(wallet.keyPairs, 'DevNet');
+      const addresses = await generateWalletAddresses(wallet.keyPairs, 'Undeployed');
       
       addresses.forEach(addr => {
-        expect(addr.address).toMatch(/^mn_shield-addr_dev1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$/);
-        expect(addr.network).toBe('dev'); // Network uses lowercase name
+        expect(addr.address).toMatch(/^mn_shield-addr_undeployed1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$/);
+        expect(addr.network).toBe('undeployed'); // Network uses lowercase name
       });
     });
 
@@ -69,7 +70,6 @@ describe('Address Generation (Step 4)', () => {
     it('should have all expected networks defined', () => {
       expect(MidnightNetworks.TestNet).toBeDefined();
       expect(MidnightNetworks.MainNet).toBeDefined();
-      expect(MidnightNetworks.DevNet).toBeDefined();
       expect(MidnightNetworks.Undeployed).toBeDefined();
       
       // Check network configuration structure

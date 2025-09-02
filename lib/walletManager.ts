@@ -7,7 +7,9 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MidnightWallet, createWalletFromSeed, generateWallet } from './midnightWallet';
-import { NetworkType } from './networkConnection';
+import { NETWORK_TYPES } from './constants';
+// Use explicit network type instead of importing from networkConnection
+type NetworkType = 'undeployed' | 'testnet' | 'mainnet';
 
 export interface WalletMetadata {
   id: string;
@@ -130,7 +132,7 @@ export class WalletManager {
   /**
    * Create a new wallet
    */
-  async createWallet(name: string, network: NetworkType = 'testnet'): Promise<StoredWallet> {
+  async createWallet(name: string, network: NetworkType = NETWORK_TYPES.TESTNET): Promise<StoredWallet> {
     console.log(`💼 Creating new wallet: ${name}`);
     
     if (!this.canAddWallet()) {
@@ -182,7 +184,7 @@ export class WalletManager {
   /**
    * Import wallet from seed
    */
-  async importWallet(name: string, seedBytes: Uint8Array, network: NetworkType = 'testnet'): Promise<StoredWallet> {
+  async importWallet(name: string, seedBytes: Uint8Array, network: NetworkType = NETWORK_TYPES.TESTNET): Promise<StoredWallet> {
     console.log(`💼 Importing wallet: ${name}`);
     
     if (!this.canAddWallet()) {

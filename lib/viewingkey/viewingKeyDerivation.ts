@@ -7,7 +7,7 @@
  */
 
 import * as CryptoJS from 'crypto-js';
-import { encodeMidnightBech32m } from './bech32m';
+import { encodeMidnightBech32m } from '../bech32m';
 
 // MidnightKeyPair type for fallback function
 interface MidnightKeyPair {
@@ -130,7 +130,7 @@ async function deriveViewingKeysFromHDWallet(seedHex: string): Promise<ViewingKe
   try {
     // Import required HD wallet modules
     const { HDWallet, Roles } = await import('@midnight-ntwrk/wallet-sdk-hd');
-    const { createIntegratedKeySet } = await import('./keyDerivationUtils');
+    const { createIntegratedKeySet } = await import('../keyDerivationUtils');
     
     // Convert seed to bytes
     const seedBytes = new Uint8Array(

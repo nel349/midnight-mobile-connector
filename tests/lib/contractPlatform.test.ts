@@ -21,7 +21,7 @@ describe('Contract Platform (Step 6)', () => {
     it('should create local network providers', async () => {
       const { createProvidersForNetwork } = await import('../../lib/midnightProviders');
       
-      const providers = await createProvidersForNetwork('local');
+      const providers = await createProvidersForNetwork('undeployed');
       
       expect(providers).toBeDefined();
       expect(providers.publicDataProvider).toBeDefined();
@@ -32,8 +32,9 @@ describe('Contract Platform (Step 6)', () => {
 
     it('should create testnet network providers', async () => {
       const { createProvidersForNetwork } = await import('../../lib/midnightProviders');
+      const { NETWORK_TYPES } = await import('../../lib/constants');
       
-      const providers = await createProvidersForNetwork('testnet');
+      const providers = await createProvidersForNetwork(NETWORK_TYPES.TESTNET);
       
       expect(providers).toBeDefined();
       expect(providers.publicDataProvider).toBeDefined();
@@ -161,7 +162,7 @@ describe('Contract Platform (Step 6)', () => {
       const { createBankContractExecutor } = await import('../../lib/circuitExecutor');
       const { DEFAULT_CONTRACT_ADDRESS } = await import('../../lib/constants');
       
-      const executor = await createBankContractExecutor(DEFAULT_CONTRACT_ADDRESS, 'local');
+      const executor = await createBankContractExecutor(DEFAULT_CONTRACT_ADDRESS, 'undeployed');
       
       expect(executor).toBeDefined();
       expect(typeof executor.executeCircuit).toBe('function');

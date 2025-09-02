@@ -15,7 +15,7 @@ import { type ParsedCircuit, convertUserInputToParameters } from './contractPars
  */
 export interface CircuitExecutionContext {
   contractAddress: string;
-  networkType: 'local' | 'testnet' | 'mainnet';
+  networkType: 'undeployed' | 'testnet' | 'mainnet';
   contractReader: ContractLedgerReader;
   circuitImplementations: any; // Generic circuit implementations
 }
@@ -179,12 +179,12 @@ export class CircuitExecutor {
  * Factory function to create a circuit executor for the bank contract
  * 
  * @param contractAddress - Contract address
- * @param networkType - Network type ('local' | 'testnet')
+ * @param networkType - Network type ('undeployed' | 'testnet')
  * @returns Promise<CircuitExecutor>
  */
 export async function createBankContractExecutor(
   contractAddress: string,
-  networkType: 'local' | 'testnet' | 'mainnet' = 'local'
+  networkType: 'undeployed' | 'testnet' | 'mainnet' = 'undeployed'
 ): Promise<CircuitExecutor> {
   console.log('🔧 Creating bank contract circuit executor...');
   

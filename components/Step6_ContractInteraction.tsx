@@ -10,7 +10,7 @@ import {
   getAvailableNetworks,
   type BasicMidnightProviders
 } from '../lib/midnightProviders';
-import { DEFAULT_CONTRACT_ADDRESS, UI_CONSTANTS } from '../lib/constants';
+import { DEFAULT_CONTRACT_ADDRESS, UI_CONSTANTS, NETWORK_TYPES } from '../lib/constants';
 import { type ContractLedgerReader, createGenericContractLedgerReader, createBankContractLedgerReader } from '../lib/contractStateReader';
 import { RealCircuitTester } from './RealCircuitTester';
 
@@ -33,7 +33,7 @@ export default function ContractInteraction({}: Props) {
   const [providers, setProviders] = useState<BasicMidnightProviders | null>(null);
   const [ledgerReader, setLedgerReader] = useState<ContractLedgerReader | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [networkType, setNetworkType] = useState<'testnet' | 'local'>('local');
+  const [networkType, setNetworkType] = useState<'testnet' | 'undeployed'>(NETWORK_TYPES.UNDEPLOYED);
   const [contractAddress, setContractAddress] = useState(DEFAULT_CONTRACT_ADDRESS);
   const [functionName, setFunctionName] = useState(UI_CONSTANTS.DEFAULT_FUNCTION_NAME);
   const [parameters, setParameters] = useState(UI_CONSTANTS.DEFAULT_PARAMETERS);

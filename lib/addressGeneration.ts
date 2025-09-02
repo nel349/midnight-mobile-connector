@@ -8,6 +8,7 @@
  */
 
 import { MidnightKeyPair } from './midnightWallet';
+import { NETWORK_ADDRESS_NAMES } from './constants';
 
 // Official Midnight address SDK has broken WASM dependencies
 // We'll use our own WASM-free implementation instead
@@ -137,10 +138,9 @@ export interface MidnightAddress {
  * Network types and their string representations
  */
 export const MidnightNetworks = {
-  Undeployed: { id: NetworkId.Undeployed, name: 'undeployed' },
-  DevNet: { id: NetworkId.DevNet, name: 'dev' },
-  TestNet: { id: NetworkId.TestNet, name: 'test' },
-  MainNet: { id: NetworkId.MainNet, name: 'mainnet' }
+  Undeployed: { id: NetworkId.Undeployed, name: NETWORK_ADDRESS_NAMES.undeployed },
+  TestNet: { id: NetworkId.TestNet, name: NETWORK_ADDRESS_NAMES.testnet },
+  MainNet: { id: NetworkId.MainNet, name: NETWORK_ADDRESS_NAMES.mainnet }
 } as const;
 
 /**

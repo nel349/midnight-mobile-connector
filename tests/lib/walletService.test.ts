@@ -1,14 +1,33 @@
 /**
- * Tests for WalletService - Integration of HD wallet and Contract Platform
+ * Tests for WalletManager - Multi-wallet storage and management
  */
 
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NETWORK_TYPES } from '../../lib/constants';
+
+// Mock AsyncStorage
+vi.mock('@react-native-async-storage/async-storage', () => ({
+  default: {
+    getItem: vi.fn(),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  },
+}));
 
 // Mock fetch for network calls
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-describe('WalletService Integration', () => {
+describe('WalletManager Integration', () => {
+  beforeEach(() => {
+    // Reset AsyncStorage mocks
+    vi.clearAllMocks();
+    (AsyncStorage.getItem as any).mockResolvedValue(null);
+    (AsyncStorage.setItem as any).mockResolvedValue(undefined);
+    (AsyncStorage.removeItem as any).mockResolvedValue(undefined);
+  });
+  
   beforeAll(() => {
     // Mock successful contract responses
     mockFetch.mockImplementation(async () => ({
@@ -25,163 +44,187 @@ describe('WalletService Integration', () => {
     }));
   });
 
-  describe('createWalletService()', () => {
-    it('should create a wallet service instance', async () => {
-      const { createWalletService } = await import('../../lib/walletService');
+  describe('WalletManager initialization', () => {
+    it('should initialize wallet manager', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
       
-      const service = createWalletService({
-        networkType: 'local'
-      });
+      const manager = new WalletManager();
+      await manager.initialize();
       
-      expect(service).toBeDefined();
-      expect(typeof service.createWallet).toBe('function');
-      expect(typeof service.restoreWallet).toBe('function');
+      expect(manager).toBeDefined();
+      expect(typeof manager.createWallet).toBe('function');
+      expect(typeof manager.importWallet).toBe('function');
+      expect(typeof manager.getActiveWallet).toBe('function');
+      expect(typeof manager.getAllWallets).toBe('function');
     });
   });
 
-  describe('WalletService.createWallet()', () => {
-    it('should create an integrated wallet', async () => {
-      const { createWalletService } = await import('../../lib/walletService');
+  describe('WalletManager.createWallet()', () => {
+    it('should create a new wallet', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
       
-      const service = createWalletService({
-        networkType: 'local'
-      });
+      const manager = new WalletManager();
+      await manager.initialize();
       
-      const integratedWallet = await service.createWallet();
+      const storedWallet = await manager.createWallet('Test Wallet', NETWORK_TYPES.TESTNET);
       
-      expect(integratedWallet).toBeDefined();
-      expect(integratedWallet.wallet).toBeDefined();
-      expect(integratedWallet.addresses).toBeDefined();
-      expect(integratedWallet.providers).toBeDefined();
-      expect(integratedWallet.config).toBeDefined();
+      expect(storedWallet).toBeDefined();
+      expect(storedWallet.metadata).toBeDefined();
+      expect(storedWallet.wallet).toBeDefined();
+      expect(storedWallet.metadata.name).toBe('Test Wallet');
+      expect(storedWallet.metadata.network).toBe(NETWORK_TYPES.TESTNET);
+      expect(storedWallet.metadata.isDefault).toBe(true); // First wallet
       
-      // Should have addresses for all networks
-      expect(integratedWallet.addresses.testnet).toBeInstanceOf(Array);
-      expect(integratedWallet.addresses.mainnet).toBeInstanceOf(Array);
-      expect(integratedWallet.addresses.devnet).toBeInstanceOf(Array);
-      expect(integratedWallet.addresses.undeployed).toBeInstanceOf(Array);
-      
-      // Should have providers
-      expect(integratedWallet.providers.publicDataProvider).toBeDefined();
-      expect(integratedWallet.providers.contractQuerier).toBeDefined();
+      // Should have wallet with key pairs
+      expect(storedWallet.wallet.keyPairs).toBeDefined();
+      expect(storedWallet.wallet.keyPairs.length).toBeGreaterThan(0);
+      expect(storedWallet.wallet.seedHex).toBeDefined();
     });
 
-    it('should create wallet with contract executor when address provided', async () => {
-      const { createWalletService } = await import('../../lib/walletService');
-      const { DEFAULT_CONTRACT_ADDRESS } = await import('../../lib/constants');
+    it('should set first wallet as active', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
       
-      const service = createWalletService({
-        networkType: 'local',
-        contractAddress: DEFAULT_CONTRACT_ADDRESS
-      });
+      const manager = new WalletManager();
+      await manager.initialize();
       
-      const integratedWallet = await service.createWallet();
+      const storedWallet = await manager.createWallet('First Wallet', NETWORK_TYPES.TESTNET);
+      const activeWallet = manager.getActiveWallet();
       
-      expect(integratedWallet.contractExecutor).toBeDefined();
-      expect(typeof integratedWallet.contractExecutor!.executeCircuit).toBe('function');
-    });
-  });
-
-  describe('WalletService.restoreWallet()', () => {
-    it('should restore wallet from seed hex', async () => {
-      const { createWalletService } = await import('../../lib/walletService');
-      
-      const service = createWalletService({
-        networkType: 'local'
-      });
-      
-      // First create a wallet to get a seed
-      const originalWallet = await service.createWallet();
-      const seedHex = originalWallet.wallet.seedHex;
-      
-      // Then restore from that seed
-      const restoredWallet = await service.restoreWallet(seedHex);
-      
-      expect(restoredWallet).toBeDefined();
-      expect(restoredWallet.wallet.seedHex).toBe(originalWallet.wallet.seedHex);
-      
-      // Should have same key pairs
-      expect(restoredWallet.wallet.keyPairs.length).toBe(originalWallet.wallet.keyPairs.length);
-      
-      // Should have same addresses
-      expect(restoredWallet.addresses.testnet[0].address).toBe(originalWallet.addresses.testnet[0].address);
-    });
-  });
-
-  describe('WalletService.getBalance()', () => {
-    it('should have addresses structure', async () => {
-      const { createWalletService } = await import('../../lib/walletService');
-      
-      const service = createWalletService({
-        networkType: 'local'
-      });
-      
-      const integratedWallet = await service.createWallet();
-      
-      // Check that we have addresses structure
-      expect(integratedWallet.addresses).toBeDefined();
-      expect(integratedWallet.addresses.undeployed).toBeDefined();
-      expect(integratedWallet.addresses.testnet).toBeDefined();
-      expect(integratedWallet.addresses.mainnet).toBeDefined();
-      expect(integratedWallet.addresses.devnet).toBeDefined();
-    });
-  });
-
-  describe('WalletService.executeCircuit()', () => {
-    it('should execute circuit when contract executor available', async () => {
-      const { createWalletService } = await import('../../lib/walletService');
-      const { DEFAULT_CONTRACT_ADDRESS } = await import('../../lib/constants');
-      
-      const service = createWalletService({
-        networkType: 'local',
-        contractAddress: DEFAULT_CONTRACT_ADDRESS
-      });
-      
-      const integratedWallet = await service.createWallet();
-      
-      // Execute get_contract_name circuit (known to work)
-      const result = await service.executeCircuit(integratedWallet, 'get_contract_name');
-      
-      expect(result).toBeDefined();
+      expect(activeWallet).toBeDefined();
+      expect(activeWallet!.metadata.id).toBe(storedWallet.metadata.id);
     });
 
-    it('should throw error when contract executor not available', async () => {
-      const { createWalletService } = await import('../../lib/walletService');
+    it('should respect wallet limit', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
       
-      const service = createWalletService({
-        networkType: 'local'
-        // No contractAddress provided
-      });
+      const manager = new WalletManager();
+      await manager.initialize();
       
-      const integratedWallet = await service.createWallet();
+      // Create 5 wallets (the limit)
+      for (let i = 1; i <= 5; i++) {
+        await manager.createWallet(`Wallet ${i}`, NETWORK_TYPES.TESTNET);
+      }
       
+      // 6th wallet should fail
       await expect(
-        service.executeCircuit(integratedWallet, 'get_contract_name')
-      ).rejects.toThrow('Contract executor not configured');
+        manager.createWallet('Wallet 6', NETWORK_TYPES.TESTNET)
+      ).rejects.toThrow('Maximum 5 wallets allowed');
     });
   });
 
-  describe('WalletService.getWalletSummary()', () => {
-    it('should provide wallet summary', async () => {
-      const { createWalletService } = await import('../../lib/walletService');
-      const { DEFAULT_CONTRACT_ADDRESS } = await import('../../lib/constants');
+  describe('WalletManager.importWallet()', () => {
+    it('should import wallet from seed bytes', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
+      const { generateRandomSeed } = await import('@midnight-ntwrk/wallet-sdk-hd');
       
-      const service = createWalletService({
-        networkType: 'local',
-        contractAddress: DEFAULT_CONTRACT_ADDRESS
+      const manager = new WalletManager();
+      await manager.initialize();
+      
+      // Generate a seed to import
+      const seedBytes = generateRandomSeed();
+      
+      const importedWallet = await manager.importWallet('Imported Wallet', seedBytes, NETWORK_TYPES.TESTNET);
+      
+      expect(importedWallet).toBeDefined();
+      expect(importedWallet.metadata.name).toBe('Imported Wallet');
+      expect(importedWallet.wallet).toBeDefined();
+      expect(importedWallet.wallet.keyPairs.length).toBeGreaterThan(0);
+      expect(importedWallet.wallet.seedHex).toBeDefined();
+    });
+  });
+
+  describe('WalletManager.setActiveWallet()', () => {
+    it('should switch active wallet', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
+      
+      const manager = new WalletManager();
+      await manager.initialize();
+      
+      // Create two wallets
+      const wallet1 = await manager.createWallet('Wallet 1', NETWORK_TYPES.TESTNET);
+      const wallet2 = await manager.createWallet('Wallet 2', NETWORK_TYPES.TESTNET);
+      
+      // Initially, wallet1 should be active (first wallet)
+      expect(manager.getActiveWallet()!.metadata.id).toBe(wallet1.metadata.id);
+      
+      // Switch to wallet2
+      await manager.setActiveWallet(wallet2.metadata.id);
+      expect(manager.getActiveWallet()!.metadata.id).toBe(wallet2.metadata.id);
+    });
+  });
+
+  describe('WalletManager.deleteWallet()', () => {
+    it('should delete a wallet', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
+      
+      const manager = new WalletManager();
+      await manager.initialize();
+      
+      // Create two wallets
+      const wallet1 = await manager.createWallet('Wallet 1', NETWORK_TYPES.TESTNET);
+      const wallet2 = await manager.createWallet('Wallet 2', NETWORK_TYPES.TESTNET);
+      
+      expect(manager.getAllWallets().length).toBe(2);
+      
+      // Delete wallet2
+      await manager.deleteWallet(wallet2.metadata.id);
+      
+      expect(manager.getAllWallets().length).toBe(1);
+      expect(manager.getAllWallets()[0].metadata.id).toBe(wallet1.metadata.id);
+    });
+
+    it('should update active wallet when deleting active wallet', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
+      
+      const manager = new WalletManager();
+      await manager.initialize();
+      
+      // Create two wallets
+      const wallet1 = await manager.createWallet('Wallet 1', NETWORK_TYPES.TESTNET);
+      const wallet2 = await manager.createWallet('Wallet 2', NETWORK_TYPES.TESTNET);
+      
+      // Switch to wallet2
+      await manager.setActiveWallet(wallet2.metadata.id);
+      expect(manager.getActiveWallet()!.metadata.id).toBe(wallet2.metadata.id);
+      
+      // Delete active wallet (wallet2)
+      await manager.deleteWallet(wallet2.metadata.id);
+      
+      // Should fall back to wallet1
+      expect(manager.getActiveWallet()!.metadata.id).toBe(wallet1.metadata.id);
+    });
+  });
+
+  describe('WalletManager.updateWallet()', () => {
+    it('should update wallet metadata', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
+      
+      const manager = new WalletManager();
+      await manager.initialize();
+      
+      const wallet = await manager.createWallet('Original Name', NETWORK_TYPES.TESTNET);
+      
+      // Update wallet name
+      await manager.updateWallet(wallet.metadata.id, {
+        name: 'Updated Name'
       });
       
-      const integratedWallet = await service.createWallet();
-      const summary = service.getWalletSummary(integratedWallet);
+      const updatedWallet = manager.getActiveWallet();
+      expect(updatedWallet!.metadata.name).toBe('Updated Name');
+    });
+  });
+
+  describe('WalletManager storage', () => {
+    it('should save and load wallet store', async () => {
+      const { WalletManager } = await import('../../lib/walletManager');
       
-      expect(summary).toBeDefined();
-      expect(summary.seedHex).toBeDefined();
-      expect(summary.keyPairs).toBeGreaterThan(0);
-      expect(summary.addresses).toBeGreaterThan(0);
-      expect(summary.network).toBe('local');
-      expect(summary.hasContractExecutor).toBe(true);
-      expect(summary.primaryAddress).toBeDefined();
-      expect(summary.roles).toBeInstanceOf(Array);
+      const manager = new WalletManager();
+      await manager.initialize();
+      
+      await manager.createWallet('Test Wallet', NETWORK_TYPES.TESTNET);
+      
+      // Verify AsyncStorage was called
+      expect(AsyncStorage.setItem).toHaveBeenCalled();
     });
   });
 });
