@@ -11,6 +11,24 @@ import {
   type BasicMidnightProviders
 } from '../lib/midnightProviders';
 import { DEFAULT_CONTRACT_ADDRESS, UI_CONSTANTS, NETWORK_TYPES } from '../lib/constants';
+
+// Utility function to serialize BigInt values for logging/display
+const serializeBigInts = (obj: any): any => {
+  if (typeof obj === 'bigint') {
+    return obj.toString() + 'n';
+  }
+  if (obj && typeof obj === 'object') {
+    if (Array.isArray(obj)) {
+      return obj.map(serializeBigInts);
+    }
+    const serialized: any = {};
+    for (const key in obj) {
+      serialized[key] = serializeBigInts(obj[key]);
+    }
+    return serialized;
+  }
+  return obj;
+};
 import { type ContractLedgerReader, createGenericContractLedgerReader, createBankContractLedgerReader } from '../lib/contractStateReader';
 import { RealCircuitTester } from './RealCircuitTester';
 
@@ -142,7 +160,7 @@ export default function ContractInteraction({}: Props) {
       
       Alert.alert(
         'Contract Call Result', 
-        `✅ Function: ${functionName}\nResult: ${JSON.stringify(result, null, 2)}`
+        `✅ Function: ${functionName}\nResult: ${JSON.stringify(serializeBigInts(result), null, 2)}`
       );
       
     } catch (error) {
@@ -492,7 +510,7 @@ export default function ContractInteraction({}: Props) {
         stateInfo: {
           type: typeof state,
           length: typeof state === 'string' ? state.length : Object.keys(state || {}).length,
-          preview: typeof state === 'string' ? state.substring(0, 200) : JSON.stringify(state).substring(0, 200)
+          preview: typeof state === 'string' ? state.substring(0, 200) : JSON.stringify(serializeBigInts(state)).substring(0, 200)
         }
       });
 
@@ -773,7 +791,7 @@ export default function ContractInteraction({}: Props) {
           <Text style={styles.sectionTitle}>Last Result</Text>
           <View style={styles.card}>
             <Text style={styles.resultText}>
-              {JSON.stringify(lastResult, null, 2)}
+              {JSON.stringify(serializeBigInts(lastResult), null, 2)}
             </Text>
           </View>
         </View>
@@ -789,13 +807,13 @@ export default function ContractInteraction({}: Props) {
           <RealCircuitTester 
             networkType={networkType}
             onCircuitCall={(circuit, parameters, result) => {
-              console.log(`REAL circuit executed: ${circuit.name}`, { 
+              console.log(`REAL circuit executed: ${circuit.name}`, serializeBigInts({ 
                 circuit: circuit.name,
                 isPure: circuit.isPure,
                 category: circuit.category,
                 parameters, 
                 result 
-              });
+              }));
               // You could update lastResult state here if wanted
             }}
           />
@@ -817,7 +835,7 @@ export default function ContractInteraction({}: Props) {
                 ? rawState.length > 1000 
                   ? rawState.substring(0, 1000) + '\n\n... (truncated, full length: ' + rawState.length + ' chars)'
                   : rawState
-                : JSON.stringify(rawState, null, 2)
+                : JSON.stringify(serializeBigInts(rawState), null, 2)
               }
             </Text>
           </View>
