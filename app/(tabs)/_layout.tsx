@@ -16,7 +16,7 @@ export default function TabLayout() {
       {/* Expo Router auto-discovers all .tsx files in this directory */}
       {/* We can optionally customize specific tabs like this: */}
       <Tabs.Screen
-        name="debug"
+        name="index"
         options={{
           title: 'Debug',
           tabBarLabel: 'Debug',
