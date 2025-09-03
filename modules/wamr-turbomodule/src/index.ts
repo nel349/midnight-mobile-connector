@@ -45,6 +45,36 @@ export class WamrModule {
   async releaseModule(moduleId: number): Promise<void> {
     return this.native.releaseModule(moduleId);
   }
+
+  // externref support methods
+
+  /**
+   * Create an externref from a JavaScript object
+   * @param moduleId - The module ID 
+   * @param jsObject - The JavaScript object to convert to externref
+   * @returns Promise resolving to externref ID
+   */
+  async createExternref(moduleId: number, jsObject: object): Promise<number> {
+    return this.native.createExternref(moduleId, jsObject);
+  }
+
+  /**
+   * Get a JavaScript object from an externref ID
+   * @param externrefId - The externref ID
+   * @returns Promise resolving to the JavaScript object
+   */
+  async getExternrefObject(externrefId: number): Promise<object> {
+    return this.native.getExternrefObject(externrefId);
+  }
+
+  /**
+   * Release an externref and its associated JavaScript object
+   * @param moduleId - The module ID
+   * @param externrefId - The externref ID to release
+   */
+  async releaseExternref(moduleId: number, externrefId: number): Promise<void> {
+    return this.native.releaseExternref(moduleId, externrefId);
+  }
 }
 
 export default new WamrModule();

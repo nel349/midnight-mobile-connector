@@ -73,6 +73,7 @@ Pod::Spec.new do |s|
       "WASM_ENABLE_FAST_INTERP=0", 
       "WASM_ENABLE_MINI_LOADER=0",
       "WASM_ENABLE_BULK_MEMORY=1",
+      "WASM_ENABLE_REF_TYPES=1",   # Enable reference types for externref support
       "WASM_ENABLE_GC=0",
       "WASM_ENABLE_STRINGREF=0",
       "WASM_ENABLE_WAMR_COMPILER=0",

@@ -20,6 +20,10 @@ struct WamrModuleInstance {
     uint32_t stack_size;
     uint32_t heap_size;
     std::unordered_map<std::string, wasm_function_inst_t> functionMap;  // Map placeholder names to functions
+    
+    // externref management
+    std::unordered_map<void*, uint32_t> jsObjectToExternref;  // Track JS object -> externref mappings
+    std::unordered_set<void*> retainedObjects;  // Track retained JS objects to prevent deallocation
 };
 
 #ifdef RCT_NEW_ARCH_ENABLED

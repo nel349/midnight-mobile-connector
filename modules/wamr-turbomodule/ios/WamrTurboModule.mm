@@ -325,6 +325,13 @@ RCT_EXPORT_METHOD(releaseModule:(double)moduleId
     
     auto moduleInstance = it->second;
     
+    // Clean up externref objects first
+    for (void* obj : moduleInstance->retainedObjects) {
+        wasm_externref_objdel(moduleInstance->instance, obj);
+    }
+    moduleInstance->retainedObjects.clear();
+    moduleInstance->jsObjectToExternref.clear();
+    
     // Clean up WAMR resources
     if (moduleInstance->exec_env) {
         wasm_runtime_destroy_exec_env(moduleInstance->exec_env);
@@ -338,6 +345,102 @@ RCT_EXPORT_METHOD(releaseModule:(double)moduleId
     
     _modules.erase(it);
     resolve([NSNull null]);
+}
+
+// MARK: - externref Support
+
+RCT_EXPORT_METHOD(createExternref:(double)moduleId
+                  jsObject:(id)jsObject
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+    
+    int modId = (int)moduleId;
+    auto it = _modules.find(modId);
+    if (it == _modules.end()) {
+        reject(@"MODULE_NOT_FOUND", @"Module not found", nil);
+        return;
+    }
+    
+    auto moduleInstance = it->second;
+    void* objPtr = (__bridge_retained void*)jsObject;  // Retain the JS object
+    uint32_t externref_idx;
+    
+    // Check if we already have a mapping for this object
+    auto existing = moduleInstance->jsObjectToExternref.find(objPtr);
+    if (existing != moduleInstance->jsObjectToExternref.end()) {
+        // Return existing externref index
+        resolve(@(existing->second));
+        CFRelease(objPtr);  // Release the extra retain we just did
+        return;
+    }
+    
+    // Create new externref mapping
+    bool success = wasm_externref_obj2ref(moduleInstance->instance, objPtr, &externref_idx);
+    
+    if (success) {
+        // Store mappings for cleanup
+        moduleInstance->jsObjectToExternref[objPtr] = externref_idx;
+        moduleInstance->retainedObjects.insert(objPtr);
+        
+        // Set cleanup callback to release when WAMR cleans up
+        wasm_externref_set_cleanup(moduleInstance->instance, objPtr, [](void* obj) {
+            CFRelease(obj);  // Release the retained JS object
+        });
+        
+        resolve(@(externref_idx));
+    } else {
+        CFRelease(objPtr);  // Release on failure
+        reject(@"EXTERNREF_FAILED", @"Failed to create externref", nil);
+    }
+}
+
+RCT_EXPORT_METHOD(getExternrefObject:(double)externrefId
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+    
+    uint32_t externref_idx = (uint32_t)externrefId;
+    void* obj_ptr;
+    
+    // Get object from externref index
+    bool success = wasm_externref_ref2obj(externref_idx, &obj_ptr);
+    
+    if (success && obj_ptr) {
+        id jsObject = (__bridge id)obj_ptr;
+        resolve(jsObject);
+    } else {
+        reject(@"EXTERNREF_NOT_FOUND", @"externref object not found", nil);
+    }
+}
+
+RCT_EXPORT_METHOD(releaseExternref:(double)moduleId
+                  externrefId:(double)externrefId
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+    
+    int modId = (int)moduleId;
+    auto it = _modules.find(modId);
+    if (it == _modules.end()) {
+        reject(@"MODULE_NOT_FOUND", @"Module not found", nil);
+        return;
+    }
+    
+    auto moduleInstance = it->second;
+    uint32_t externref_idx = (uint32_t)externrefId;
+    void* obj_ptr;
+    
+    // Get object pointer from externref
+    if (wasm_externref_ref2obj(externref_idx, &obj_ptr) && obj_ptr) {
+        // Remove from our tracking
+        moduleInstance->jsObjectToExternref.erase(obj_ptr);
+        moduleInstance->retainedObjects.erase(obj_ptr);
+        
+        // Delete externref mapping in WAMR
+        wasm_externref_objdel(moduleInstance->instance, obj_ptr);
+        
+        resolve([NSNull null]);
+    } else {
+        reject(@"EXTERNREF_NOT_FOUND", @"externref object not found", nil);
+    }
 }
 
 // MARK: - TurboModule Protocol

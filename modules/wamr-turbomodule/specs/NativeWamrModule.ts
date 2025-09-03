@@ -13,6 +13,11 @@ export interface Spec extends TurboModule {
   
   // Release/cleanup a WASM module
   releaseModule(moduleId: number): Promise<void>;
+  
+  // externref support - convert JS objects to externref and back
+  createExternref(moduleId: number, jsObject: Object): Promise<number>;
+  getExternrefObject(externrefId: number): Promise<Object>;
+  releaseExternref(moduleId: number, externrefId: number): Promise<void>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('WamrTurboModule');
