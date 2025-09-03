@@ -7,6 +7,9 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { setupCrypto } from '@/lib/cryptoSetup';
 
+// Setup Polygen WASM support
+require('@callstack/polygen/polyfill');
+
 // Setup crypto polyfill globally at app startup
 setupCrypto();
 

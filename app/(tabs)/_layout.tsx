@@ -41,6 +41,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="hammer.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="polygen-test"
+        options={{
+          title: 'Polygen Test',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

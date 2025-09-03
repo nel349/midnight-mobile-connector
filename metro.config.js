@@ -1,62 +1,82 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const { withPolygenConfig } = require('@callstack/polygen-metro-config');
 const path = require('path');
+const fs = require('fs');
 
-const config = getDefaultConfig(__dirname);
+// Get the default Expo config
+const defaultConfig = getDefaultConfig(__dirname);
 
-// Add WASM support and other extensions
-config.resolver.assetExts.push('wasm');
-config.resolver.sourceExts.push('cjs', 'mjs');
+const config = {
+  resolver: {
+    // Add WASM support
+    assetExts: [...defaultConfig.resolver.assetExts, 'wasm'],
+    sourceExts: [...defaultConfig.resolver.sourceExts, 'cjs', 'mjs'],
+    
+    // Fix module resolution for packages with broken main fields
+    resolverMainFields: ['react-native', 'browser', 'main'],
+    
+    // Enable package exports support for modern packages
+    unstable_enablePackageExports: true,
+    
+    // Override resolver platforms to handle ESM packages properly
+    platforms: ['ios', 'android', 'native', 'web'],
+    
+    // Custom resolver for problematic packages
+    resolveRequest: (context, moduleName, platform) => {
+      // Handle @midnight-ntwrk/onchain-runtime which uses exports instead of main
+      if (moduleName === '@midnight-ntwrk/onchain-runtime') {
+        try {
+          // This package uses exports with browser/node conditions
+          // For React Native, use the browser export
+          const packageDir = path.dirname(require.resolve('@midnight-ntwrk/onchain-runtime/package.json'));
+          const browserExport = path.join(packageDir, 'midnight_onchain_runtime_wasm.js');
+          
+          if (fs.existsSync(browserExport)) {
+            return {
+              type: 'sourceFile',
+              filePath: browserExport,
+            };
+          }
+        } catch (error) {
+          console.error(`❌ Failed to resolve ${moduleName}:`, error.message);
+        }
+        
+        throw new Error(`Cannot resolve @midnight-ntwrk/onchain-runtime`);
+      }
 
-// Fix module resolution for packages with broken main fields
-config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
+      // Handle @midnight-ntwrk/compact-runtime - use our React Native compatible version
+      if (moduleName === '@midnight-ntwrk/compact-runtime') {
+        try {
+          // Point to our React Native compatible runtime instead of the WASM version
+          const reactNativeRuntime = path.join(__dirname, 'lib', 'reactNativeCompactRuntime.js');
+          
+          if (fs.existsSync(reactNativeRuntime)) {
+            return {
+              type: 'sourceFile',
+              filePath: reactNativeRuntime,
+            };
+          }
+        } catch (error) {
+          console.error(`❌ Failed to resolve ${moduleName}:`, error);
+        }
+      }
 
-// Override resolver platforms to handle ESM packages properly
-config.resolver.platforms = ['ios', 'android', 'native', 'web'];
-
-// Handle packages that use exports instead of main
-config.resolver.resolveRequest = (context, moduleName, platform) => {
-  console.log(`🔍 Resolving module: ${moduleName}`);
-  
-  // Handle @midnight-ntwrk/onchain-runtime which uses exports instead of main
-  if (moduleName === '@midnight-ntwrk/onchain-runtime') {
-    try {
-      // Get the actual resolved module path first
-      const modulePath = require.resolve('@midnight-ntwrk/onchain-runtime');
-      const packageDir = path.dirname(modulePath);
-      
-      // Use the background JS file directly to avoid WASM import issues
-      const backgroundExport = path.join(packageDir, 'midnight_onchain_runtime_wasm_bg.js');
-      
-      console.log(`✅ Resolving ${moduleName} to background JS: ${backgroundExport}`);
-      
-      return {
-        type: 'sourceFile',
-        filePath: backgroundExport,
-      };
-    } catch (error) {
-      console.error(`❌ Failed to resolve ${moduleName}:`, error);
+      // Use default resolution for everything else
+      return context.resolveRequest(context, moduleName, platform);
     }
   }
-
-  // Handle @midnight-ntwrk/compact-runtime - use our React Native compatible version
-  if (moduleName === '@midnight-ntwrk/compact-runtime') {
-    try {
-      // Point to our React Native compatible runtime instead of the WASM version
-      const reactNativeRuntime = path.join(__dirname, 'lib', 'reactNativeCompactRuntime.js');
-      
-      console.log(`✅ Resolving ${moduleName} to React Native runtime: ${reactNativeRuntime}`);
-      
-      return {
-        type: 'sourceFile',
-        filePath: reactNativeRuntime,
-      };
-    } catch (error) {
-      console.error(`❌ Failed to resolve ${moduleName}:`, error);
-    }
-  }
-
-  // Use the default resolution for everything else
-  return context.resolveRequest(context, moduleName, platform);
 };
 
-module.exports = config;
+// Merge with default Expo config and apply Polygen configuration
+const mergedConfig = {
+  ...defaultConfig,
+  resolver: {
+    ...defaultConfig.resolver,
+    ...config.resolver,
+    assetExts: config.resolver.assetExts,
+    sourceExts: config.resolver.sourceExts,
+  }
+};
+
+// Apply Polygen configuration using the official pattern
+module.exports = withPolygenConfig(mergedConfig);

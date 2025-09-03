@@ -5,8 +5,8 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "vitest",
@@ -16,6 +16,9 @@
     "update-contract": "cd ../midnight-bank/bank-contract && npm run build && cd - && cp -Rf ../midnight-bank/bank-contract/dist/managed/bank/compiler ./contracts/ && cp -Rf ../midnight-bank/bank-contract/dist/managed/bank/contract ./contracts/"
   },
   "dependencies": {
+    "@callstack/polygen": "^0.2.1",
+    "@callstack/polygen-cli": "^0.2.1",
+    "@callstack/polygen-metro-config": "^0.2.1",
     "@expo/vector-icons": "^14.1.0",
     "@midnight-ntwrk/compact-runtime": "^0.8.1",
     "@midnight-ntwrk/dapp-connector-api": "^3.0.0",
@@ -64,7 +67,8 @@
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-web": "~0.20.0",
-    "react-native-webview": "13.13.5"
+    "react-native-webview": "13.13.5",
+    "simple-sha256-wasm": "^0.1.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
