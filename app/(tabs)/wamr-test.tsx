@@ -63,29 +63,39 @@ export default function WamrTest() {
         return;
       }
 
-      // Test the "test" function (no args, returns 42)
-      if (exports.includes('test')) {
-        addResult(`📋 Test 1: test() - should return 42`);
-        const result = await WamrModule.callFunction(moduleId, 'test', []);
-        addResult(`✅ test() returned: ${result} (expected: 42)`);
-        
-        if (result === 42) {
-          addResult('✅ test() function works correctly!');
-        } else {
-          addResult(`❌ test() returned unexpected value: ${result}`);
+      // Since export names are empty, use placeholder names if they exist
+      if (exports.includes('func_0') || exports.includes('test')) {
+        const funcName = exports.includes('test') ? 'test' : 'func_0';
+        addResult(`📋 Test 1: ${funcName}() - should return 42`);
+        try {
+          const result = await WamrModule.callFunction(moduleId, funcName, []);
+          addResult(`✅ ${funcName}() returned: ${result} (expected: 42)`);
+          
+          if (result === 42) {
+            addResult('✅ First function works correctly!');
+          } else {
+            addResult(`❌ ${funcName}() returned unexpected value: ${result}`);
+          }
+        } catch (err) {
+          addResult(`❌ Failed to call ${funcName}: ${err}`);
         }
       }
 
-      // Test the "add" function (two args)
-      if (exports.includes('add')) {
-        addResult(`📋 Test 2: add(5, 3) - should return 8`);
-        const sum = await WamrModule.callFunction(moduleId, 'add', [5, 3]);
-        addResult(`✅ add(5, 3) returned: ${sum} (expected: 8)`);
-        
-        if (sum === 8) {
-          addResult('✅ add() function works correctly!');
-        } else {
-          addResult(`❌ add() returned unexpected value: ${sum}`);
+      // Test the second function (two args)
+      if (exports.includes('func_1') || exports.includes('add')) {
+        const funcName = exports.includes('add') ? 'add' : 'func_1';
+        addResult(`📋 Test 2: ${funcName}(5, 3) - should return 8`);
+        try {
+          const sum = await WamrModule.callFunction(moduleId, funcName, [5, 3]);
+          addResult(`✅ ${funcName}(5, 3) returned: ${sum} (expected: 8)`);
+          
+          if (sum === 8) {
+            addResult('✅ Second function works correctly!');
+          } else {
+            addResult(`❌ ${funcName}() returned unexpected value: ${sum}`);
+          }
+        } catch (err) {
+          addResult(`❌ Failed to call ${funcName}: ${err}`);
         }
       }
 

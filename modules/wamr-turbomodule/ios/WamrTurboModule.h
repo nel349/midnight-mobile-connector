@@ -19,6 +19,7 @@ struct WamrModuleInstance {
     wasm_exec_env_t exec_env;
     uint32_t stack_size;
     uint32_t heap_size;
+    std::unordered_map<std::string, wasm_function_inst_t> functionMap;  // Map placeholder names to functions
 };
 
 #ifdef RCT_NEW_ARCH_ENABLED
