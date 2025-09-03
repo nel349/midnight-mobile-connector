@@ -1,5 +1,9 @@
 import NativeWamrModule from '../specs/NativeWamrModule';
 
+if (!NativeWamrModule) {
+  throw new Error('WamrTurboModule native module not found. Please rebuild the app.');
+}
+
 export class WamrModule {
   private native = NativeWamrModule;
 
@@ -9,7 +13,9 @@ export class WamrModule {
    * @returns Promise resolving to module ID
    */
   async loadModule(wasmBytes: Uint8Array): Promise<number> {
-    return this.native.loadModule(wasmBytes);
+    // Convert Uint8Array to base64 string for native bridge
+    const base64 = Buffer.from(wasmBytes).toString('base64');
+    return this.native.loadModule(base64);
   }
 
   /**

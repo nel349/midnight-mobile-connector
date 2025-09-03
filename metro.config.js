@@ -1,5 +1,4 @@
 const { getDefaultConfig } = require('expo/metro-config');
-const { withPolygenConfig } = require('@callstack/polygen-metro-config');
 const path = require('path');
 const fs = require('fs');
 
@@ -67,7 +66,7 @@ const config = {
   }
 };
 
-// Merge with default Expo config and apply Polygen configuration
+// Merge with default Expo config
 const mergedConfig = {
   ...defaultConfig,
   resolver: {
@@ -78,5 +77,4 @@ const mergedConfig = {
   }
 };
 
-// Apply Polygen configuration using the official pattern
-module.exports = withPolygenConfig(mergedConfig);
+module.exports = mergedConfig;

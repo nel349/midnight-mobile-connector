@@ -1,21 +1,6 @@
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
 
-# Polygen WebAssembly support
-def install_polygen
-  ws_dir = Pathname.new(__dir__)
-  
-  polygen_out_dir = ws_dir / '..' / 'node_modules' / '.polygen-out'
-  
-  if polygen_out_dir.exist?
-    podspec_path = polygen_out_dir / 'host' / 'ReactNativeWebAssemblyHost.podspec'
-    
-    if podspec_path.exist?
-      pod 'ReactNativeWebAssemblyHost', :path => podspec_path.relative_path_from(ws_dir)
-    end
-  end
-end
-
 require 'json'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
@@ -30,10 +15,6 @@ prepare_react_native_project!
 
 target 'MidnightWasmTest' do
   use_expo_modules!
-  # install_polygen  # Temporarily disabled to test WAMR
-  
-  # WAMR TurboModule
-  pod 'WamrTurboModule', :path => '../modules/wamr-turbomodule'
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
@@ -60,6 +41,9 @@ target 'MidnightWasmTest' do
     :app_path => "#{Pod::Config.instance.installation_root}/..",
     :privacy_file_aggregation_enabled => podfile_properties['apple.privacyManifestAggregationEnabled'] != 'false',
   )
+  
+  # Add WamrTurboModule
+  pod 'WamrTurboModule', :path => '../modules/wamr-turbomodule'
 
   post_install do |installer|
     react_native_post_install(
