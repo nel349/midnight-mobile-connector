@@ -75,6 +75,23 @@ export class WamrModule {
   async releaseExternref(moduleId: number, externrefId: number): Promise<void> {
     return this.native.releaseExternref(moduleId, externrefId);
   }
+
+  // Enhanced function calling with externref support
+
+  /**
+   * Call a WASM function with mixed arguments including externref (JS objects)
+   * @param moduleId - The module ID
+   * @param functionName - The function name to call
+   * @param args - Array of arguments: numbers or {type: 'externref', value: jsObject}
+   * @returns Promise resolving to function result (could be JS object if externref returned)
+   */
+  async callFunctionWithExternref(
+    moduleId: number, 
+    functionName: string, 
+    args: Array<number | {type: 'externref', value: any}>
+  ): Promise<any> {
+    return this.native.callFunctionWithExternref(moduleId, functionName, args);
+  }
 }
 
 export default new WamrModule();

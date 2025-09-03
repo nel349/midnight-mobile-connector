@@ -18,6 +18,9 @@ export interface Spec extends TurboModule {
   createExternref(moduleId: number, jsObject: Object): Promise<number>;
   getExternrefObject(externrefId: number): Promise<Object>;
   releaseExternref(moduleId: number, externrefId: number): Promise<void>;
+  
+  // Enhanced function calling with externref support
+  callFunctionWithExternref(moduleId: number, functionName: string, args: Object[]): Promise<Object>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('WamrTurboModule');

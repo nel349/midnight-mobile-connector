@@ -95,6 +95,50 @@ export default function ExternrefTest() {
         addResult('✅ Correctly failed to retrieve released externref');
       }
 
+      // Test 8: Call WASM function with externref parameter
+      addResult('📋 Test 8: Calling WASM function with externref parameter...');
+      const testObjectForFunction = {
+        functionTest: true,
+        data: 'passed to WASM function',
+        timestamp: Date.now()
+      };
+      
+      try {
+        const functionResult = await WamrModule.callFunctionWithExternref(
+          loadedModuleId, 
+          'func_0',  // This should act as echo_externref
+          [{type: 'externref', value: testObjectForFunction}]
+        );
+        
+        addResult(`✅ Function returned: ${JSON.stringify(functionResult)}`);
+        
+        // Verify the returned object matches what we sent
+        if (JSON.stringify(functionResult) === JSON.stringify(testObjectForFunction)) {
+          addResult('✅ Function call with externref works! Object round-trip successful!');
+        } else {
+          addResult('❌ Function returned different object than expected');
+        }
+      } catch (error) {
+        addResult(`❌ Function call with externref failed: ${error}`);
+      }
+
+      // Test 9: Call WASM function with mixed arguments (number + externref)
+      addResult('📋 Test 9: Calling WASM function with mixed arguments...');
+      try {
+        const mixedResult = await WamrModule.callFunctionWithExternref(
+          loadedModuleId,
+          'func_1',  // This should handle mixed args
+          [
+            42,  // Regular number argument
+            {type: 'externref', value: {mixed: true, value: 'test'}}
+          ]
+        );
+        
+        addResult(`✅ Mixed arguments function returned: ${JSON.stringify(mixedResult)}`);
+      } catch (error) {
+        addResult(`❌ Mixed arguments function call failed: ${error}`);
+      }
+
       setStatus('🎉 All externref tests completed!');
       addResult('🎉 SUCCESS: All externref tests passed!');
 
