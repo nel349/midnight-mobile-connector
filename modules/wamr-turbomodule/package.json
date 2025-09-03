@@ -1,0 +1,42 @@
+{
+  "name": "@midnight/wamr-turbomodule",
+  "version": "0.1.0",
+  "description": "WAMR (WebAssembly Micro Runtime) TurboModule for React Native",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "prepare": "bob build",
+    "build": "bob build"
+  },
+  "keywords": [
+    "react-native",
+    "turbomodule", 
+    "webassembly",
+    "wamr"
+  ],
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "react-native-builder-bob": "^0.30.2",
+    "typescript": "^5.0.0"
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      "commonjs",
+      "module", 
+      "typescript"
+    ]
+  },
+  "codegenConfig": {
+    "name": "WamrModuleSpec",
+    "type": "modules",
+    "jsSrcsDir": "specs",
+    "android": {
+      "javaPackageName": "com.midnight.wamr"
+    }
+  }
+}

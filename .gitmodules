@@ -1,9 +1,0 @@
-[submodule "wamr"]
-	path = wamr
-	url = https://github.com/bytecodealliance/wasm-micro-runtime.git
-[submodule "modules/wamr-turbomodule/wamr"]
-	path = modules/wamr-turbomodule/wamr
-	url = https://github.com/bytecodealliance/wasm-micro-runtime.git
-[submodule "modules/wamr-turbomodule/modules/wamr-turbomodule/wamr"]
-	path = modules/wamr-turbomodule/modules/wamr-turbomodule/wamr
-	url = https://github.com/bytecodealliance/wasm-micro-runtime.git
