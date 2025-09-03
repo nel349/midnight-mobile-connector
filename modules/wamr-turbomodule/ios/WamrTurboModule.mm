@@ -74,11 +74,20 @@ RCT_EXPORT_METHOD(loadModule:(NSString *)wasmBytesBase64
     uint8_t *bytes = (uint8_t *)[wasmBytes bytes];
     uint32_t size = (uint32_t)[wasmBytes length];
     
+    // Debug: Log the first 16 bytes of the WASM module
+    RCTLogInfo(@"WASM module size: %u bytes", size);
+    if (size >= 16) {
+        RCTLogInfo(@"WASM header: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+                   bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                   bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+    }
+    
     // Load WASM module
     char error_buf[128];
     wasm_module_t module = wasm_runtime_load(bytes, size, error_buf, sizeof(error_buf));
     if (!module) {
         NSString *errorMsg = [NSString stringWithFormat:@"Failed to load WASM module: %s", error_buf];
+        RCTLogError(@"WAMR load error: %s", error_buf);
         reject(@"LOAD_MODULE_FAILED", errorMsg, nil);
         return;
     }
@@ -182,16 +191,49 @@ RCT_EXPORT_METHOD(getExports:(double)moduleId
     
     auto moduleInstance = it->second;
     NSMutableArray *exports = [[NSMutableArray alloc] init];
+    NSMutableArray *debugInfo = [[NSMutableArray alloc] init];
     
-    // Get export count from module (not instance)
-    uint32_t export_count = wasm_runtime_get_export_count(moduleInstance->module);
+    // Get export count first
+    int32_t export_count = wasm_runtime_get_export_count(moduleInstance->module);
+    [debugInfo addObject:[NSString stringWithFormat:@"Export count: %d", export_count]];
     
-    for (uint32_t i = 0; i < export_count; i++) {
-        // Use a simpler approach - try to look up common function names
-        // This is a simplified version for the proof of concept
-        if (i == 0) [exports addObject:@"add"];
-        if (i == 1) [exports addObject:@"multiply"];  
-        if (i == 2) [exports addObject:@"getAnswer"];
+    // Enumerate actual exports using WAMR's export enumeration
+    for (int32_t i = 0; i < export_count; i++) {
+        wasm_export_t export_type;
+        wasm_runtime_get_export_type(moduleInstance->module, i, &export_type);
+        
+        if (export_type.name) {
+            [debugInfo addObject:[NSString stringWithFormat:@"Export %d: name='%s' kind=%d", i, export_type.name, (int)export_type.kind]];
+            
+            // Check if it's a function export
+            if (export_type.kind == WASM_IMPORT_EXPORT_KIND_FUNC) {
+                [exports addObject:[NSString stringWithUTF8String:export_type.name]];
+                [debugInfo addObject:[NSString stringWithFormat:@"✅ Added function export: %s", export_type.name]];
+            } else {
+                [debugInfo addObject:[NSString stringWithFormat:@"⚠️ Non-function export: %s (kind=%d)", export_type.name, (int)export_type.kind]];
+            }
+        } else {
+            [debugInfo addObject:[NSString stringWithFormat:@"❌ Export %d: null name", i]];
+        }
+    }
+    
+    // If we found exports, test function lookup with the actual names
+    if ([exports count] > 0) {
+        NSString *firstExport = [exports objectAtIndex:0];
+        wasm_function_inst_t func = wasm_runtime_lookup_function(moduleInstance->instance, [firstExport UTF8String]);
+        if (func) {
+            [debugInfo addObject:[NSString stringWithFormat:@"✅ Function lookup successful for: %@", firstExport]];
+        } else {
+            [debugInfo addObject:[NSString stringWithFormat:@"❌ Function lookup failed for: %@", firstExport]];
+        }
+    }
+    
+    // Add debug info if no exports found or for debugging
+    if ([exports count] == 0) {
+        [exports addObject:[NSString stringWithFormat:@"DEBUG: %@", [debugInfo componentsJoinedByString:@" | "]]];
+    } else {
+        // Add debug info as a separate entry for visibility
+        [exports addObject:[NSString stringWithFormat:@"DEBUG_INFO: %@", [debugInfo componentsJoinedByString:@" | "]]];
     }
     
     resolve(exports);
