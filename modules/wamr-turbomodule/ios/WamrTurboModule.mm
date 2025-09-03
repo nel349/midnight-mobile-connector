@@ -202,18 +202,23 @@ RCT_EXPORT_METHOD(getExports:(double)moduleId
         wasm_export_t export_type;
         wasm_runtime_get_export_type(moduleInstance->module, i, &export_type);
         
-        if (export_type.name) {
+        if (export_type.name && strlen(export_type.name) > 0) {
             [debugInfo addObject:[NSString stringWithFormat:@"Export %d: name='%s' kind=%d", i, export_type.name, (int)export_type.kind]];
             
             // Check if it's a function export
             if (export_type.kind == WASM_IMPORT_EXPORT_KIND_FUNC) {
-                [exports addObject:[NSString stringWithUTF8String:export_type.name]];
-                [debugInfo addObject:[NSString stringWithFormat:@"✅ Added function export: %s", export_type.name]];
+                NSString *exportName = [NSString stringWithUTF8String:export_type.name];
+                if (exportName) {
+                    [exports addObject:exportName];
+                    [debugInfo addObject:[NSString stringWithFormat:@"✅ Added function export: %s", export_type.name]];
+                } else {
+                    [debugInfo addObject:[NSString stringWithFormat:@"❌ Failed to create NSString from export name: %s", export_type.name]];
+                }
             } else {
                 [debugInfo addObject:[NSString stringWithFormat:@"⚠️ Non-function export: %s (kind=%d)", export_type.name, (int)export_type.kind]];
             }
         } else {
-            [debugInfo addObject:[NSString stringWithFormat:@"❌ Export %d: null name", i]];
+            [debugInfo addObject:[NSString stringWithFormat:@"❌ Export %d: null or empty name", i]];
         }
     }
     
