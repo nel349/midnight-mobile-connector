@@ -274,6 +274,8 @@ RCT_EXPORT_METHOD(getExports:(double)moduleId
                 wasm_function_inst_t func = wasm_runtime_lookup_function(moduleInstance->instance, export_type.name);
                 if (func) {
                     [debugInfo addObject:[NSString stringWithFormat:@"✅ Function lookup succeeded for: %@", nameStr]];
+                    // Store in function map for later use
+                    moduleInstance->functionMap[export_type.name] = func;
                 } else {
                     [debugInfo addObject:[NSString stringWithFormat:@"❌ Function lookup failed for: %@", nameStr]];
                 }

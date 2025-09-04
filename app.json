@@ -8,6 +8,10 @@
     "scheme": "midnightwasmtest",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "assetBundlePatterns": [
+      "assets/*.wasm",
+      "assets/**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nel349.MidnightWasmTest"

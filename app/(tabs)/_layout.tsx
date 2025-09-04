@@ -29,6 +29,20 @@ export default function TabLayout() {
           tabBarLabel: 'WAMR',
         }}
       />
+      <Tabs.Screen
+        name="externref-test"
+        options={{
+          title: 'externref Test',
+          tabBarLabel: 'externref',
+        }}
+      />
+      <Tabs.Screen
+        name="midnight-test"
+        options={{
+          title: 'Midnight Test',
+          tabBarLabel: 'Midnight',
+        }}
+      />
     </Tabs>
   );
 }
