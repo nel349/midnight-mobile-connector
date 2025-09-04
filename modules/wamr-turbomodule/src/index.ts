@@ -22,6 +22,14 @@ export class WamrModule {
   private loadedModules = new Map<number, string[]>(); // Track loaded modules and their exports
 
   /**
+   * Debug method to check native symbol registration status
+   * @returns Promise resolving to debug info
+   */
+  async debugGetNativeSymbolStatus(): Promise<any> {
+    return this.native.debugGetNativeSymbolStatus();
+  }
+
+  /**
    * Load a WebAssembly module from bytes
    * @param wasmBytes - The WASM module bytes as Uint8Array
    * @returns Promise resolving to module ID

@@ -45,11 +45,19 @@ export interface Transaction {
 }
 
 export interface SignedData {
-  message: string;
+  message?: string; // Keep for backward compatibility
   signature: string;
-  publicKey?: string;
+  publicKey?: string; // Keep for backward compatibility
   timestamp?: number;
   nonce?: number;
+  // New fields for proper WASM signature verification
+  originalData?: any;
+  dataBytes?: number[];
+  signingKey?: string;
+  verifyingKey?: string;
+  // WASM-native SecretKeys approach fields
+  coinSecretKey?: any;
+  coinPublicKey?: any;
 }
 
 export interface QueryContext {

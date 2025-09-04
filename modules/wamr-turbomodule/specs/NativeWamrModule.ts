@@ -21,6 +21,9 @@ export interface Spec extends TurboModule {
   
   // Enhanced function calling with externref support
   callFunctionWithExternref(moduleId: number, functionName: string, args: Object[]): Promise<Object>;
+  
+  // Debug method to check native symbol registration
+  debugGetNativeSymbolStatus(): Promise<Object>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('WamrTurboModule');

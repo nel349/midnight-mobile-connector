@@ -13,6 +13,12 @@
     std::unordered_map<int, std::shared_ptr<WamrModuleInstance>> _modules;
     int _nextModuleId;
     bool _initialized;
+    // Track WASM pointers for object instances (like SecretKeys)
+    std::unordered_map<int, uint32_t> _wasmPointers;  // Maps ID -> WASM pointer
+    int _nextPointerId;
+    // Track native symbol registration status
+    bool _registrationSuccessful;
+    NSString *_registeredModuleName;
 }
 
 RCT_EXPORT_MODULE(WamrTurboModule)
@@ -25,9 +31,102 @@ RCT_EXPORT_MODULE(WamrTurboModule)
     if (self = [super init]) {
         _nextModuleId = 1;
         _initialized = false;
+        _nextPointerId = 1000;  // Start pointer IDs at 1000 to distinguish from other values
         [self initializeWamr];
     }
     return self;
+}
+
+// Mock functions for WASM imports - signatures match WAMR documentation
+// CRITICAL: externref parameters must be uintptr_t per WAMR docs
+uint32_t __wbg_length_a446193dc22c12f8(wasm_exec_env_t exec_env, uintptr_t externref_obj) {
+    printf("MOCK: __wbg_length_a446193dc22c12f8 called with externref_obj=%lu\n", externref_obj);
+    return 64; // Return reasonable length for seed
+}
+
+uintptr_t __wbg_buffer_609cc3eee51ed158(wasm_exec_env_t exec_env, uintptr_t externref_obj) {
+    printf("MOCK: __wbg_buffer_609cc3eee51ed158 called with externref_obj=%lu\n", externref_obj);
+    return 100; // Return mock buffer externref 
+}
+
+uintptr_t __wbg_new_a12002a7f91c75be(wasm_exec_env_t exec_env, uintptr_t arg_ref) {
+    printf("MOCK: __wbg_new_a12002a7f91c75be called with arg_ref=%lu\n", arg_ref);
+    return 101; // Return mock externref
+}
+
+void __wbg_set_65595bdd868b3009(wasm_exec_env_t exec_env, uintptr_t obj_ref, uintptr_t data_ref, uint32_t offset) {
+    printf("MOCK: __wbg_set_65595bdd868b3009 called with obj_ref=%lu, data_ref=%lu, offset=%u\n", obj_ref, data_ref, offset);
+}
+
+uintptr_t __wbg_newwithbyteoffsetandlength_d97e637ebe145a9a(wasm_exec_env_t exec_env, uintptr_t buffer_ref, uint32_t offset, uint32_t length) {
+    printf("MOCK: __wbg_newwithbyteoffsetandlength_d97e637ebe145a9a called with buffer_ref=%lu, offset=%u, length=%u\n", buffer_ref, offset, length);
+    return buffer_ref + 2; // Return new externref
+}
+
+void __wbindgen_object_drop_ref(wasm_exec_env_t exec_env, uint32_t obj_ref) {
+    printf("MOCK: __wbindgen_object_drop_ref called with obj_ref=%u\n", obj_ref);
+}
+
+void __wbindgen_throw(wasm_exec_env_t exec_env, uint32_t ptr, uint32_t len) {
+    printf("MOCK: __wbindgen_throw called with ptr=%u, len=%u\n", ptr, len);
+}
+
+// CRITICAL: Add implementations for core wbindgen functions
+uintptr_t __wbindgen_memory(wasm_exec_env_t exec_env) {
+    printf("MOCK: __wbindgen_memory called - returning mock memory reference\n");
+    return 1000; // Return mock memory externref
+}
+
+// Use void as expected by WASM
+void __wbindgen_init_externref_table(wasm_exec_env_t exec_env) {
+    printf("MOCK: __wbindgen_init_externref_table called - externref table initialized\n");
+    // No return needed
+}
+
+// Error handling function for wasm-bindgen - takes (i32, i32) -> externref
+uintptr_t __wbindgen_error_new(wasm_exec_env_t exec_env, uint32_t ptr, uint32_t len) {
+    printf("MOCK: __wbindgen_error_new called with ptr=%u, len=%u\n", ptr, len);
+    return 200; // Return mock error externref
+}
+
+uint32_t __wbg_instanceof_Uint8Array_17156bcf118086a9(wasm_exec_env_t exec_env, uintptr_t obj_ref) {
+    printf("MOCK: __wbg_instanceof_Uint8Array called with obj_ref=%lu\n", obj_ref);
+    return 1; // Return true - assume it's a Uint8Array
+}
+
+uintptr_t __wbg_newwithlength_a381634e90c276d4(wasm_exec_env_t exec_env, uint32_t length) {
+    printf("MOCK: __wbg_newwithlength called with length=%u\n", length);
+    return 2000 + length; // Return mock Uint8Array externref
+}
+
+uintptr_t __wbg_buffer_09165b52af8c5237(wasm_exec_env_t exec_env) {
+    printf("MOCK: __wbg_buffer_09165b52af8c5237 called\n");
+    return 3000; // Return mock buffer externref
+}
+
+uintptr_t __wbg_subarray_aa9065fa9dc5df96(wasm_exec_env_t exec_env, uintptr_t buffer_ref, uint32_t start, uint32_t end) {
+    printf("MOCK: __wbg_subarray called with buffer_ref=%lu, start=%u, end=%u\n", buffer_ref, start, end);
+    return buffer_ref + 1; // Return mock subarray externref
+}
+
+uint32_t __wbg_byteLength_e674b853d9c77e1d(wasm_exec_env_t exec_env, uintptr_t obj_ref) {
+    printf("MOCK: __wbg_byteLength called with obj_ref=%lu\n", obj_ref);
+    return 64; // Return reasonable byte length
+}
+
+uint32_t __wbg_byteOffset_fd862df290ef848d(wasm_exec_env_t exec_env, uintptr_t obj_ref) {
+    printf("MOCK: __wbg_byteOffset called with obj_ref=%lu\n", obj_ref);
+    return 0; // Return zero offset
+}
+
+uint32_t __wbg_get_27fe3dac035c4c2e(wasm_exec_env_t exec_env, uint32_t obj_ref, uint32_t index) {
+    printf("MOCK: __wbg_get called with obj_ref=%u, index=%u\n", obj_ref, index);
+    return index < 64 ? (index + 1) : 0; // Return mock byte values
+}
+
+void __wbg_set_a68214f35c417fa9(wasm_exec_env_t exec_env, uint32_t obj_ref, uint32_t index, uint32_t value) {
+    printf("MOCK: __wbg_set called with obj_ref=%u, index=%u, value=%u\n", obj_ref, index, value);
+    // Just ignore for now
 }
 
 - (void)initializeWamr {
@@ -39,8 +138,24 @@ RCT_EXPORT_MODULE(WamrTurboModule)
         return;
     }
     
+    // Native symbols will be registered per-module, not globally
+    _registrationSuccessful = false;  // Will be set during module loading
+    _registeredModuleName = nil;
+    
     _initialized = true;
     RCTLogInfo(@"WAMR runtime initialized successfully");
+}
+
+RCT_EXPORT_METHOD(debugGetNativeSymbolStatus:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+    
+    NSMutableDictionary *status = [[NSMutableDictionary alloc] init];
+    [status setObject:@(_initialized) forKey:@"wasmRuntimeInitialized"];
+    [status setObject:@(_registrationSuccessful) forKey:@"registrationSuccessful"];
+    [status setObject:(_registeredModuleName ? _registeredModuleName : @"NONE") forKey:@"registeredModuleName"];
+    [status setObject:@[@"__wbindgen_init_externref_table", @"__wbg_length_a446193dc22c12f8", @"__wbindgen_memory", @"__wbg_buffer_609cc3eee51ed158", @"__wbg_new_a12002a7f91c75be", @"__wbindgen_error_new", @"__wbg_set_65595bdd868b3009"] forKey:@"registeredSymbols"];
+    
+    resolve(status);
 }
 
 - (void)dealloc {
@@ -82,9 +197,89 @@ RCT_EXPORT_METHOD(loadModule:(NSString *)wasmBytesBase64
                    bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
     }
     
-    // Load WASM module
+    // Register native symbols IMMEDIATELY before loading this specific module
+    static NativeSymbol native_symbols[] = {
+        {
+            "__wbindgen_init_externref_table",  
+            (void *)__wbindgen_init_externref_table,
+            "()",  // Actually void signature
+            NULL
+        },
+        {
+            "__wbg_length_a446193dc22c12f8",  
+            (void *)__wbg_length_a446193dc22c12f8,
+            "(r)i",
+            NULL
+        },
+        {
+            "__wbindgen_memory",  
+            (void *)__wbindgen_memory,
+            "()r",
+            NULL
+        },
+        {
+            "__wbg_buffer_609cc3eee51ed158",
+            (void *)__wbg_buffer_609cc3eee51ed158,
+            "(r)r",
+            NULL
+        },
+        {
+            "__wbg_new_a12002a7f91c75be",
+            (void *)__wbg_new_a12002a7f91c75be,
+            "(r)r",  // Takes externref, returns externref
+            NULL
+        },
+        {
+            "__wbindgen_error_new",
+            (void *)__wbindgen_error_new,
+            "(ii)r",  // Takes i32 + i32, returns externref
+            NULL
+        },
+        {
+            "__wbg_set_65595bdd868b3009",
+            (void *)__wbg_set_65595bdd868b3009,
+            "(rri)",  // Takes externref + externref + i32, returns void
+            NULL
+        }
+    };
+    
+    uint32_t n_native_symbols = sizeof(native_symbols) / sizeof(NativeSymbol);
+    
+    // Register to multiple module names - WASM bindgen can use various patterns
+    const char* module_patterns[] = {
+        "./midnight_zswap_wasm_bg.js",  // What the error shows
+        "./midnight_zswap_wasm_bg",      // Without .js
+        "midnight_zswap_wasm_bg.js",     // Without ./
+        "midnight_zswap_wasm_bg",        // Without ./ and .js  
+        "env"                            // Standard WASM env
+    };
+    
+    bool any_registered = false;
+    for (int i = 0; i < 5; i++) {
+        if (wasm_runtime_register_natives(module_patterns[i], native_symbols, n_native_symbols)) {
+            printf("✅ Successfully registered natives to module: %s\n", module_patterns[i]);
+            any_registered = true;
+        } else {
+            printf("❌ Failed to register natives to module: %s\n", module_patterns[i]);
+        }
+    }
+    
+    if (!any_registered) {
+        _registrationSuccessful = false;
+        _registeredModuleName = nil;
+        reject(@"NATIVE_SYMBOLS_FAILED", @"Failed to register native symbols to any module pattern", nil);
+        return;
+    }
+    
+    // Update debug status
+    _registrationSuccessful = true;
+    _registeredModuleName = @"multiple_patterns";
+    
+    // Load WASM module AFTER registering import functions
+    printf("🔍 DEBUG: About to call wasm_runtime_load with %u bytes\n", size);
     char error_buf[128];
     wasm_module_t module = wasm_runtime_load(bytes, size, error_buf, sizeof(error_buf));
+    printf("🔍 DEBUG: wasm_runtime_load returned: %p\n", module);
     if (!module) {
         NSString *errorMsg = [NSString stringWithFormat:@"Failed to load WASM module: %s", error_buf];
         RCTLogError(@"WAMR load error: %s", error_buf);
@@ -197,6 +392,31 @@ RCT_EXPORT_METHOD(callFunction:(double)moduleId
         argv[i] = [[args objectAtIndex:i] unsignedIntValue];
     }
     
+    // Special handling for functions that expect WASM object pointers as input
+    if ([functionName isEqualToString:@"secretkeys_coinPublicKey"] ||
+        [functionName isEqualToString:@"secretkeys_encryptionPublicKey"] ||
+        [functionName isEqualToString:@"secretkeys_coinSecretKey"] ||
+        [functionName isEqualToString:@"secretkeys_encryptionSecretKey"]) {
+        
+        // Check if the first argument is a pointer ID we're tracking
+        if (argc > 0) {
+            int pointerId = argv[0];
+            printf("LOOKUP: pointer ID %d\n", pointerId);
+            auto ptrIt = _wasmPointers.find(pointerId);
+            
+            if (ptrIt != _wasmPointers.end()) {
+                // Replace the pointer ID with the actual WASM pointer
+                uint32_t actualPointer = ptrIt->second;
+                argv[0] = actualPointer;
+                
+                // Log via React Native bridge so it appears in JS console
+                printf("REPLACED: %d -> %u\n", pointerId, actualPointer);
+            } else {
+                printf("NOT FOUND: %d\n", pointerId);
+            }
+        }
+    }
+    
     // Call function
     if (!wasm_runtime_call_wasm(moduleInstance->exec_env, func, argc, argv)) {
         const char *error = wasm_runtime_get_exception(moduleInstance->instance);
@@ -206,7 +426,25 @@ RCT_EXPORT_METHOD(callFunction:(double)moduleId
         return;
     }
     
-    // Return the result (assuming i32 return type for now)
+    // Special handling for functions that return WASM object pointers - FORCED REBUILD
+    printf("FORCE DEBUG: Checking function %s for pointer tracking\n", [functionName UTF8String]);
+    if ([functionName isEqualToString:@"secretkeys_fromSeed"] || 
+        [functionName isEqualToString:@"secretkeys_new"] ||
+        [functionName isEqualToString:@"secretkeys_fromSeedRng"]) {
+        // These functions return a pointer to a SecretKeys object
+        // The return value is in argv[0] after the call
+        uint32_t wasmPointer = argv[0];
+        int pointerId = _nextPointerId++;
+        _wasmPointers[pointerId] = wasmPointer;
+        
+        printf("STORED: pointer ID %d -> WASM pointer %u\n", pointerId, wasmPointer);
+        
+        // Return the pointer ID instead of the raw pointer
+        resolve(@(pointerId));
+        return;
+    }
+    
+    // Return the result normally for other functions
     resolve(@(argv[0]));
 }
 
@@ -390,6 +628,8 @@ RCT_EXPORT_METHOD(callFunctionWithExternref:(double)moduleId
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject) {
     
+    printf("FORCE DEBUG: Checking function %s for pointer tracking\n", [functionName UTF8String]);
+    
     int modId = (int)moduleId;
     auto it = _modules.find(modId);
     if (it == _modules.end()) {
@@ -398,6 +638,96 @@ RCT_EXPORT_METHOD(callFunctionWithExternref:(double)moduleId
     }
     
     auto moduleInstance = it->second;
+    
+    // **POINTER TRACKING FOR SECRETKEYS FUNCTIONS**
+    if ([functionName isEqualToString:@"secretkeys_fromSeed"] || 
+        [functionName isEqualToString:@"secretkeys_new"] ||
+        [functionName isEqualToString:@"secretkeys_fromSeedRng"]) {
+        
+        printf("MATCHED secretkeys function - implementing pointer tracking\n");
+        
+        // Look up WASM function - try cached version first
+        std::string funcName = [functionName UTF8String];
+        wasm_function_inst_t func = nullptr;
+        
+        // First try the cached function map
+        auto funcIt = moduleInstance->functionMap.find(funcName);
+        if (funcIt != moduleInstance->functionMap.end()) {
+            func = funcIt->second;
+            printf("FOUND function in cache: %s\n", funcName.c_str());
+        } else {
+            // Fall back to direct lookup
+            func = wasm_runtime_lookup_function(moduleInstance->instance, funcName.c_str());
+            printf("DIRECT LOOKUP result for %s: %p\n", funcName.c_str(), func);
+        }
+        
+        if (!func) {
+            // Return debug info through error message since native logs don't work
+            NSString *debugInfo = [NSString stringWithFormat:
+                @"Function '%@' not found. Debug: cached_entries=%zu, direct_lookup=%p, instance=%p, module=%p", 
+                functionName, 
+                moduleInstance->functionMap.size(),
+                wasm_runtime_lookup_function(moduleInstance->instance, funcName.c_str()),
+                moduleInstance->instance,
+                moduleInstance->module];
+            reject(@"FUNCTION_NOT_FOUND", debugInfo, nil);
+            return;
+        }
+        
+        // Prepare arguments - handle externref properly
+        uint32_t argc = (uint32_t)[args count];
+        uint32_t argv[16]; 
+        if (argc > 15) {
+            reject(@"TOO_MANY_ARGS", @"Maximum 15 arguments supported", nil);
+            return;
+        }
+        
+        // Convert arguments properly
+        for (uint32_t i = 0; i < argc; i++) {
+            id arg = [args objectAtIndex:i];
+            if ([arg isKindOfClass:[NSDictionary class]]) {
+                NSDictionary *dict = (NSDictionary *)arg;
+                if ([dict[@"type"] isEqualToString:@"externref"]) {
+                    // This is an externref - we'll create a mock object reference
+                    id value = dict[@"value"];
+                    if ([value isKindOfClass:[NSData class]]) {
+                        // Store the seed data in WASM memory and return pointer
+                        NSData *seedData = (NSData *)value;
+                        
+                        // For now, just pass a mock reference
+                        argv[i] = 1000 + i; // Mock externref ID
+                        printf("MOCK: externref arg %d -> mock ID %u\n", i, argv[i]);
+                    } else {
+                        argv[i] = 1000 + i;
+                    }
+                } else {
+                    argv[i] = 0;
+                }
+            } else if ([arg isKindOfClass:[NSNumber class]]) {
+                argv[i] = [arg unsignedIntValue];
+            } else {
+                argv[i] = 0;
+            }
+        }
+        
+        // Call WASM function  
+        printf("Calling WASM function\n");
+        if (!wasm_runtime_call_wasm(moduleInstance->exec_env, func, argc, argv)) {
+            const char *error = wasm_runtime_get_exception(moduleInstance->instance);
+            NSString *errorMsg = [NSString stringWithFormat:@"Function call failed: %s", error ? error : "unknown error"];
+            reject(@"FUNCTION_CALL_FAILED", errorMsg, nil);
+            return;
+        }
+        
+        // Store the pointer and return pointer ID
+        uint32_t wasmPointer = argv[0];
+        int pointerId = _nextPointerId++;
+        _wasmPointers[pointerId] = wasmPointer;
+        
+        printf("STORED: pointer ID %d -> WASM pointer %u\n", pointerId, wasmPointer);
+        resolve(@(pointerId));
+        return;
+    }
     wasm_function_inst_t func = nullptr;
     
     // First check if we have this function in our map

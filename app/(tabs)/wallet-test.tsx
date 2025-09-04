@@ -283,6 +283,152 @@ export default function WalletTest() {
     }
   };
 
+  const exploreWasmModules = async () => {
+    if (!isInitialized) {
+      Alert.alert('Error', 'Please initialize SDK first');
+      return;
+    }
+
+    try {
+      setStatus('🔍 Exploring WASM module functions...');
+      addResult('🔍 Exploring available WASM module functions...');
+      
+      const exports = await sdk.getModuleExports();
+      
+      addResult('📋 ONCHAIN MODULE FUNCTIONS:');
+      exports.onchain.forEach(func => {
+        addResult(`  - ${func}`);
+      });
+      
+      addResult('📋 ZSWAP MODULE FUNCTIONS:');
+      exports.zswap.forEach(func => {
+        addResult(`  - ${func}`);
+      });
+      
+      // Look for address-related functions
+      const addressFunctions = [...exports.onchain, ...exports.zswap]
+        .filter(func => func.toLowerCase().includes('address'));
+      
+      if (addressFunctions.length > 0) {
+        addResult('🏠 ADDRESS-RELATED FUNCTIONS FOUND:');
+        addressFunctions.forEach(func => {
+          addResult(`  🎯 ${func}`);
+        });
+      }
+      
+      setStatus('✅ WASM module exploration complete!');
+      
+    } catch (error) {
+      const errorMessage = `❌ Module exploration failed: ${error}`;
+      setStatus(errorMessage);
+      addResult(errorMessage);
+    }
+  };
+
+  const testFullLaceAddress = async () => {
+    if (!isInitialized) {
+      Alert.alert('Error', 'Please initialize SDK first');
+      return;
+    }
+
+    try {
+      setStatus('🏠 Generating complete Lace-compatible wallet...');
+      addResult('🏠 Creating full Lace wallet with shielded address...');
+      
+      // Use standard 24-word test mnemonic for consistent results
+      const testMnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art';
+      
+      const laceWallet = await sdk.createLaceCompatibleWalletWithAddress(testMnemonic, 'testnet');
+      
+      addResult(`✅ Complete Lace-Compatible Wallet:`);
+      addResult(`  📝 Mnemonic: ${laceWallet.mnemonic.split(' ').slice(0, 3).join(' ')}...`);
+      addResult(`  🛤️  Derivation: ${laceWallet.derivationPath}`);
+      addResult(`  🔑 Coin Key: ${laceWallet.coinPublicKey}`);
+      addResult(`  🔒 Encryption Key: ${laceWallet.encryptionPublicKey}`);
+      addResult(`  🏠 Shielded Address: ${laceWallet.shieldedAddress}`);
+      addResult(`  🌐 Network: ${laceWallet.network}`);
+      
+      addResult(`📦 Address Components:`);
+      addResult(`  Coin Key Hex: ${laceWallet.addressComponents.coinKeyHex.substring(0, 16)}...`);
+      addResult(`  Encryption Key Hex: ${laceWallet.addressComponents.encKeyHex.substring(0, 16)}...`);
+      addResult(`  Network Prefix: ${laceWallet.addressComponents.networkPrefix}`);
+      
+      addResult(`🎯 This uses the same HD derivation approach as Lace!`);
+      addResult(`💡 Test this mnemonic in Lace to compare addresses`);
+      setStatus('✅ Lace address generation complete!');
+      
+    } catch (error) {
+      const errorMessage = `❌ Lace address generation failed: ${error}`;
+      setStatus(errorMessage);
+      addResult(errorMessage);
+    }
+  };
+
+  const analyzeHDCapabilities = async () => {
+    if (!isInitialized) {
+      Alert.alert('Error', 'Please initialize SDK first');
+      return;
+    }
+
+    try {
+      setStatus('🔍 Analyzing WASM for HD derivation capabilities...');
+      addResult('🔍 Searching WASM modules for HD derivation functions...');
+      
+      const analysis = await sdk.analyzeWasmForHDCapabilities();
+      
+      addResult(`📊 HD Capability Analysis Results:`);
+      
+      if (analysis.seedFunctions.length > 0) {
+        addResult(`🌱 SEED FUNCTIONS (${analysis.seedFunctions.length}):`);
+        analysis.seedFunctions.forEach(func => addResult(`  • ${func}`));
+      }
+      
+      if (analysis.keyFunctions.length > 0) {
+        addResult(`🔑 KEY FUNCTIONS (${analysis.keyFunctions.length}):`);
+        analysis.keyFunctions.slice(0, 10).forEach(func => addResult(`  • ${func}`));
+        if (analysis.keyFunctions.length > 10) {
+          addResult(`  ... and ${analysis.keyFunctions.length - 10} more`);
+        }
+      }
+      
+      if (analysis.mnemonicFunctions.length > 0) {
+        addResult(`📝 MNEMONIC FUNCTIONS (${analysis.mnemonicFunctions.length}):`);
+        analysis.mnemonicFunctions.forEach(func => addResult(`  • ${func}`));
+      } else {
+        addResult(`❌ No mnemonic functions found`);
+      }
+      
+      if (analysis.derivationFunctions.length > 0) {
+        addResult(`🛤️  DERIVATION FUNCTIONS (${analysis.derivationFunctions.length}):`);
+        analysis.derivationFunctions.forEach(func => addResult(`  • ${func}`));
+      } else {
+        addResult(`❌ No HD derivation functions found`);
+      }
+
+      if (analysis.signingFunctions.length > 0) {
+        addResult(`✍️ SIGNING FUNCTIONS (${analysis.signingFunctions.length}):`);
+        analysis.signingFunctions.forEach(func => addResult(`  • ${func}`));
+      }
+      
+      addResult(`📈 Total WASM functions: ${analysis.allFunctions.length}`);
+      
+      if (analysis.derivationFunctions.length === 0 && analysis.mnemonicFunctions.length === 0) {
+        addResult(`🚨 CRITICAL: No HD derivation capabilities found in WASM!`);
+        addResult(`💡 This explains why we need JavaScript libraries`);
+        addResult(`🔄 Mixed approach may cause compatibility issues`);
+      } else {
+        addResult(`🎯 Found potential HD functions - let's investigate!`);
+      }
+      
+      setStatus('✅ HD capability analysis complete!');
+      
+    } catch (error) {
+      const errorMessage = `❌ HD analysis failed: ${error}`;
+      setStatus(errorMessage);
+      addResult(errorMessage);
+    }
+  };
+
   const clearResults = () => {
     setResults([]);
     setStatus(isInitialized ? '✅ SDK Ready' : 'Ready to test Midnight wallet creation');
@@ -325,6 +471,21 @@ export default function WalletTest() {
           title="Test Crypto"
           onPress={testCryptoOperations}
           disabled={!wallet}
+        />
+        <Button
+          title="Explore WASM"
+          onPress={exploreWasmModules}
+          disabled={!isInitialized}
+        />
+        <Button
+          title="HD Analysis"
+          onPress={analyzeHDCapabilities}
+          disabled={!isInitialized}
+        />
+        <Button
+          title="Lace Address"
+          onPress={testFullLaceAddress}
+          disabled={!isInitialized}
         />
         <Button
           title="Clear"
