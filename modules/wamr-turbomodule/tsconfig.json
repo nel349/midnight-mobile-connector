@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./lib/typescript",
+    "rootDir": "./",
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "strict": false,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src/**/*",
+    "specs/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "lib"
+  ]
+}

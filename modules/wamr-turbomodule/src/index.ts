@@ -1,4 +1,17 @@
 import NativeWamrModule from '../specs/NativeWamrModule';
+import {
+  CoinInfo,
+  TokenType,
+  SecretKeys,
+  ExternrefArg,
+  WamrError,
+  ModuleNotFoundError,
+  FunctionNotFoundError,
+  InvalidArgumentError,
+} from './types';
+
+// Export all types
+export * from './types';
 
 if (!NativeWamrModule) {
   throw new Error('WamrTurboModule native module not found. Please rebuild the app.');
@@ -6,6 +19,7 @@ if (!NativeWamrModule) {
 
 export class WamrModule {
   private native = NativeWamrModule;
+  private loadedModules = new Map<number, string[]>(); // Track loaded modules and their exports
 
   /**
    * Load a WebAssembly module from bytes
@@ -15,7 +29,17 @@ export class WamrModule {
   async loadModule(wasmBytes: Uint8Array): Promise<number> {
     // Convert Uint8Array to base64 string for native bridge
     const base64 = Buffer.from(wasmBytes).toString('base64');
-    return this.native.loadModule(base64);
+    const moduleId = await this.native.loadModule(base64);
+    
+    // Get and cache exports for this module
+    try {
+      const exports = await this.native.getExports(moduleId);
+      this.loadedModules.set(moduleId, exports);
+    } catch (error) {
+      console.warn(`Failed to get exports for module ${moduleId}:`, error);
+    }
+    
+    return moduleId;
   }
 
   /**
@@ -41,9 +65,15 @@ export class WamrModule {
   /**
    * Release/cleanup a WASM module
    * @param moduleId - The module ID to release
+   * @throws {ModuleNotFoundError} If the module doesn't exist
    */
   async releaseModule(moduleId: number): Promise<void> {
-    return this.native.releaseModule(moduleId);
+    if (!this.loadedModules.has(moduleId)) {
+      throw new ModuleNotFoundError(moduleId);
+    }
+    
+    await this.native.releaseModule(moduleId);
+    this.loadedModules.delete(moduleId);
   }
 
   // externref support methods
@@ -84,13 +114,33 @@ export class WamrModule {
    * @param functionName - The function name to call
    * @param args - Array of arguments: numbers or {type: 'externref', value: jsObject}
    * @returns Promise resolving to function result (could be JS object if externref returned)
+   * @throws {ModuleNotFoundError} If the module doesn't exist
+   * @throws {FunctionNotFoundError} If the function doesn't exist
    */
   async callFunctionWithExternref(
     moduleId: number, 
     functionName: string, 
-    args: Array<number | {type: 'externref', value: any}>
+    args: Array<number | ExternrefArg>
   ): Promise<any> {
+    if (!this.loadedModules.has(moduleId)) {
+      throw new ModuleNotFoundError(moduleId);
+    }
+    
+    const exports = this.loadedModules.get(moduleId);
+    if (exports && !exports.includes(functionName)) {
+      throw new FunctionNotFoundError(functionName);
+    }
+    
     return this.native.callFunctionWithExternref(moduleId, functionName, args);
+  }
+
+  /**
+   * Helper method to create an externref argument
+   * @param value - The JavaScript object to wrap as externref
+   * @returns ExternrefArg wrapper
+   */
+  static externref<T>(value: T): ExternrefArg<T> {
+    return { type: 'externref', value };
   }
 }
 

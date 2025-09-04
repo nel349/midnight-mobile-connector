@@ -20,6 +20,12 @@ const config = {
     // Override resolver platforms to handle ESM packages properly
     platforms: ['ios', 'android', 'native', 'web'],
     
+    // Block problematic paths to prevent conflicts
+    blockList: [
+      // Block turbomodule's node_modules to prevent React conflicts
+      /modules\/wamr-turbomodule\/node_modules\/.*/,
+    ],
+    
     // Custom resolver for problematic packages
     resolveRequest: (context, moduleName, platform) => {
       // Handle @midnight-ntwrk/onchain-runtime which uses exports instead of main

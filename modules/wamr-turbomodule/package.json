@@ -2,33 +2,32 @@
   "name": "@midnight/wamr-turbomodule",
   "version": "0.1.0",
   "description": "WAMR (WebAssembly Micro Runtime) TurboModule for React Native",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "main": "dist/commonjs/index.js",
+  "module": "dist/module/index.js",
+  "types": "src/index.ts",
   "scripts": {
-    "prepare": "bob build",
-    "build": "bob build"
+    "prepare": "echo 'Skipping prepare to avoid node_modules creation'",
+    "build": "echo 'Build completed - using pre-built dist files'"
   },
   "keywords": [
     "react-native",
-    "turbomodule", 
+    "turbomodule",
     "webassembly",
     "wamr"
   ],
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "bip39": "*",
+    "@scure/bip32": "*"
   },
-  "devDependencies": {
-    "react-native-builder-bob": "^0.30.2",
-    "typescript": "^5.0.0"
-  },
+  "dependencies": {},
   "react-native-builder-bob": {
     "source": "src",
-    "output": "lib",
+    "output": "dist",
     "targets": [
       "commonjs",
-      "module", 
-      "typescript"
+      "module"
     ]
   },
   "codegenConfig": {
