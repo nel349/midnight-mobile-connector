@@ -406,16 +406,23 @@ export class MidnightSDK {
     // Check if this is a pointer-based SecretKeys from enhanced native module
     if (secretKeys && secretKeys._isPointerBased && typeof secretKeys._pointerId === 'number') {
       console.log('🔑 USING POINTER-BASED approach with ID:', secretKeys._pointerId);
-      const key = await WamrModuleInstance.callFunctionWithExternref(
+      console.log('🔑 PRE-CALL: moduleId =', this.zswapModuleId);
+      console.log('🔑 PRE-CALL: functionName = secretkeys_coinPublicKey');
+      console.log('🔑 PRE-CALL: args =', [secretKeys._pointerId]);
+      console.log('🔑 PRE-CALL: About to call WamrModuleInstance.callFunction...');
+      
+      // Use callFunction since these functions expect (i32) -> (i32, i32, i32, i32)
+      const key = await WamrModuleInstance.callFunction(
         this.zswapModuleId!,
         'secretkeys_coinPublicKey',
         [secretKeys._pointerId]
       );
-      console.log('🔑 POINTER RESULT:', typeof key, key);
+      console.log('🔑 POST-CALL: Received result');
+      console.log('🔑 DIRECT CALL RESULT:', typeof key, key);
       
       if (key && typeof key === 'object') {
         // Convert byte object to hex
-        const bytes = Object.keys(key).map(k => key[k]);
+        const bytes = Object.keys(key).map(k => (key as any)[k] as number);
         return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
       }
       return key?.toString(16) || '';
@@ -439,16 +446,23 @@ export class MidnightSDK {
     // Check if this is a pointer-based SecretKeys from enhanced native module
     if (secretKeys && secretKeys._isPointerBased && typeof secretKeys._pointerId === 'number') {
       console.log('🔐 USING POINTER-BASED approach with ID:', secretKeys._pointerId);
-      const key = await WamrModuleInstance.callFunctionWithExternref(
+      console.log('🔐 PRE-CALL: moduleId =', this.zswapModuleId);
+      console.log('🔐 PRE-CALL: functionName = secretkeys_encryptionPublicKey');
+      console.log('🔐 PRE-CALL: args =', [secretKeys._pointerId]);
+      console.log('🔐 PRE-CALL: About to call WamrModuleInstance.callFunction...');
+      
+      // Use callFunction since these functions expect (i32) -> (i32, i32, i32, i32)
+      const key = await WamrModuleInstance.callFunction(
         this.zswapModuleId!,
         'secretkeys_encryptionPublicKey',
         [secretKeys._pointerId]  // Pass pointer ID directly
       );
-      console.log('🔐 POINTER RESULT:', typeof key, key);
+      console.log('🔐 POST-CALL: Received result');
+      console.log('🔐 DIRECT CALL RESULT:', typeof key, key);
       
       if (key && typeof key === 'object') {
         // Convert byte object to hex
-        const bytes = Object.keys(key).map(k => key[k]);
+        const bytes = Object.keys(key).map(k => (key as any)[k] as number);
         return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
       }
       return key?.toString(16) || '';
@@ -1030,10 +1044,14 @@ export class MidnightSDK {
       console.log('🔍 SEED: Length =', seed.length, 'bytes');
       console.log('🔍 SEED: First 8 bytes =', Array.from(seed.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
       
+      // Convert Uint8Array to Array for React Native bridge compatibility
+      const seedArray = Array.from(seed);
+      console.log('🔍 SEED: Converting Uint8Array to Array for RN bridge');
+      
       const result = await WamrModuleInstance.callFunctionWithExternref(
         this.zswapModuleId!,
         'secretkeys_fromSeed',
-        [seed as any]  // Pass the actual seed data
+        [seedArray as any]  // Pass the seed data as regular array
       );
       console.log('✅ secretkeys_fromSeed succeeded! Result:', result);
       secretKeys = {
