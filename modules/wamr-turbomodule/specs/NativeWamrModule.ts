@@ -22,6 +22,9 @@ export interface Spec extends TurboModule {
   // Enhanced function calling with externref support
   callFunctionWithExternref(moduleId: number, functionName: string, args: Object[]): Promise<Object>;
   
+  // Call a function with binary data allocated in WASM memory  
+  callFunctionWithMemory(moduleId: number, functionName: string, data: number[]): Promise<Object>;
+  
   // Debug method to check native symbol registration
   debugGetNativeSymbolStatus(): Promise<Object>;
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Button, StyleSheet, Alert } from 'react-native';
-import { setupCrypto, testCryptoPolyfill } from '../lib/cryptoSetup';
+import { setupCrypto } from '../lib/cryptoSetup';
 
 /**
  * Step 1: Midnight-Compatible Crypto Validation

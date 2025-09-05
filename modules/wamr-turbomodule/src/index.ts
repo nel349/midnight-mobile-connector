@@ -143,6 +143,31 @@ export class WamrModule {
   }
 
   /**
+   * Call a WASM function with binary data allocated in WASM memory
+   * This method handles functions that expect (ptr: i32, len: i32) parameters
+   * @param moduleId - The module ID
+   * @param functionName - The function name to call
+   * @param data - Binary data to allocate in WASM memory
+   * @returns Promise resolving to function result
+   */
+  async callFunctionWithMemory(
+    moduleId: number, 
+    functionName: string, 
+    data: Uint8Array
+  ): Promise<any> {
+    if (!this.loadedModules.has(moduleId)) {
+      throw new ModuleNotFoundError(moduleId);
+    }
+    
+    const exports = this.loadedModules.get(moduleId);
+    if (exports && !exports.includes(functionName)) {
+      throw new FunctionNotFoundError(functionName);
+    }
+    
+    return this.native.callFunctionWithMemory(moduleId, functionName, Array.from(data));
+  }
+
+  /**
    * Helper method to create an externref argument
    * @param value - The JavaScript object to wrap as externref
    * @returns ExternrefArg wrapper

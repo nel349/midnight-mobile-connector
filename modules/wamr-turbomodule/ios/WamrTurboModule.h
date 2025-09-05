@@ -27,6 +27,9 @@ struct WamrModuleInstance {
     
     // Current seed data location in WASM memory (for wasm-bindgen functions)
     uint32_t currentSeedWasmAddr = 0;  // WASM address where current seed data is stored
+    
+    // Native copy of seed data (safer than accessing WASM memory)
+    NSData* storedSeedData = nil;
 };
 
 #ifdef RCT_NEW_ARCH_ENABLED

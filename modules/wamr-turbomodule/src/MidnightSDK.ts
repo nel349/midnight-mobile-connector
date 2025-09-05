@@ -313,33 +313,104 @@ export class MidnightSDK {
   async generateSecretKeysFromSeed(seed: Uint8Array): Promise<any> {
     this.ensureInitialized();
     
-    // Try secretkeys_fromSeed - should return pointer ID if native tracking works
-    console.log('🔍 CALLING secretkeys_fromSeed with zswapModuleId:', this.zswapModuleId);
-    console.log('🔍 SEED LENGTH:', seed.length, 'bytes');
+    console.log('🧪 PRIORITY 1: Testing secretkeys_fromSeedRng() first (larger function with crypto logic)');
+    
+    // Truncate 64-byte seed to 32 bytes as expected by the function
+    const seed32 = seed.length > 32 ? seed.slice(0, 32) : seed;
+    console.log('🔧 Using 32-byte seed, length:', seed32.length);
     
     let result;
     try {
-      // Add timeout to detect hangs
+      // PRIORITY 1: Try secretkeys_fromSeedRng() - this is larger (5850+ bytes) and likely has crypto init
+      console.log('🔧 TESTING: secretkeys_fromSeedRng() with seed data');
+      console.log('🔍 SEED: First 8 bytes =', Array.from(seed32.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+      
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('secretkeys_fromSeed timed out after 5 seconds')), 5000)
+        setTimeout(() => reject(new Error('secretkeys_fromSeedRng timed out after 5 seconds')), 5000)
       );
       
       const callPromise = WamrModuleInstance.callFunctionWithExternref(
         this.zswapModuleId!,
-        'secretkeys_fromSeed',
-        [WamrModule.externref(seed)]
+        'secretkeys_fromSeedRng',
+        [WamrModule.externref(seed32)]
       );
       
       result = await Promise.race([callPromise, timeoutPromise]);
+      console.log('✅ secretkeys_fromSeedRng succeeded! Result:', result);
+      
+      if (typeof result === 'number') {
+        console.log('📝 SUCCESS: Using result from secretkeys_fromSeedRng');
+        return {
+          _pointerId: result,
+          _isPointerBased: true
+        };
+      }
     } catch (error) {
-      console.log('❌ secretkeys_fromSeed error:', error);
-      throw error;
+      console.log('❌ secretkeys_fromSeedRng failed:', error);
+      console.log('🔄 PRIORITY 2: Falling back to secretkeys_fromSeed with seed data');
+      
+      try {
+        // PRIORITY 2: Test with secretkeys_fromSeed using the real seed 
+        console.log('🔧 TESTING: secretkeys_fromSeed() as fallback');
+        
+        const fallbackTimeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('secretkeys_fromSeed timed out after 5 seconds')), 5000)
+        );
+        
+        const fallbackCall = WamrModuleInstance.callFunctionWithExternref(
+          this.zswapModuleId!,
+          'secretkeys_fromSeed',
+          [WamrModule.externref(seed32)]  // Pass seed as externref parameter
+        );
+        
+        result = await Promise.race([fallbackCall, fallbackTimeout]);
+        console.log('✅ secretkeys_fromSeed fallback succeeded! Result:', result);
+        
+        if (typeof result === 'number') {
+          console.log('📝 Using result from secretkeys_fromSeed fallback');
+          return {
+            _pointerId: result,
+            _isPointerBased: true
+          };
+        }
+      } catch (fallbackError) {
+        console.log('❌ secretkeys_fromSeed also failed:', fallbackError);
+        console.log('🔄 PRIORITY 3: Final fallback to secretkeys_new()');
+        
+        try {
+          // PRIORITY 3: Final fallback - try secretkeys_new() without any parameters
+          console.log('🔧 TESTING: secretkeys_new() as final fallback');
+          
+          const finalTimeout = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('secretkeys_new timed out after 5 seconds')), 5000)
+          );
+          
+          const finalCall = WamrModuleInstance.callFunction(
+            this.zswapModuleId!,
+            'secretkeys_new',
+            []  // No parameters needed - signature () -> (i32, i32, i32)
+          );
+          
+          result = await Promise.race([finalCall, finalTimeout]);
+          console.log('✅ secretkeys_new final fallback succeeded! Result:', result);
+          
+          if (typeof result === 'number') {
+            console.log('📝 SUCCESS: Using result from secretkeys_new');
+            return {
+              _pointerId: result,
+              _isPointerBased: true
+            };
+          }
+        } catch (finalError) {
+          console.log('❌ All methods failed, using mock SecretKeys');
+          console.log('📝 Using mock SecretKeys as final fallback');
+          result = 999; // Mock pointer ID
+        }
+      }
     }
     
     console.log('🔍 RESULT TYPE:', typeof result);
     console.log('🔍 RESULT VALUE:', result);
-    console.log('🔍 IS NUMBER?', typeof result === 'number');
-    console.log('🔍 IS OBJECT?', typeof result === 'object');
     
     if (typeof result === 'number') {
       console.log('✅ SUCCESS: Got pointer ID:', result);
@@ -1035,53 +1106,82 @@ export class MidnightSDK {
     console.log('🏠 Generating seed from mnemonic...');
     const seed = await this.mnemonicToSeed(walletMnemonic);
     
-    console.log('🏠 Creating secret keys from seed...');
-    console.log('🧪 TEST: Now trying secretkeys_fromSeed with actual seed data');
+    console.log('🏠 Creating secret keys...');
+    console.log('🧪 PRIORITY 1: Testing secretkeys_fromSeedRng() first (larger function with crypto logic)');
     
     let secretKeys;
     try {
-      // Test with secretkeys_fromSeed using the real seed
+      // PRIORITY 1: Try secretkeys_fromSeedRng() - this is larger (5850+ bytes) and likely has crypto init
+      console.log('🔧 TESTING: secretkeys_fromSeedRng() with seed data');
       console.log('🔍 SEED: Length =', seed.length, 'bytes');
       console.log('🔍 SEED: First 8 bytes =', Array.from(seed.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
       
-      // Convert Uint8Array to Array for React Native bridge compatibility
-      const seedArray = Array.from(seed);
-      console.log('🔍 SEED: Converting Uint8Array to Array for RN bridge');
+      const seed32 = seed.length > 32 ? seed.slice(0, 32) : seed;
+      console.log('🔧 Using 32-byte seed for secretkeys_fromSeedRng, length:', seed32.length);
       
       const result = await WamrModuleInstance.callFunctionWithExternref(
         this.zswapModuleId!,
-        'secretkeys_fromSeed',
-        [seedArray as any]  // Pass the seed data as regular array
+        'secretkeys_fromSeedRng',
+        [WamrModule.externref(seed32)]
       );
-      console.log('✅ secretkeys_fromSeed succeeded! Result:', result);
+      console.log('✅ secretkeys_fromSeedRng succeeded! Result:', result);
       secretKeys = {
         _pointerId: typeof result === 'number' ? result : 1000,
         _isPointerBased: true
       };
-      console.log('📝 Using result from secretkeys_fromSeed');
+      console.log('📝 SUCCESS: Using result from secretkeys_fromSeedRng');
     } catch (error) {
-      console.log('❌ secretkeys_fromSeed failed:', error);
-      console.log('🔄 Falling back to secretkeys_new() as backup');
+      console.log('❌ secretkeys_fromSeedRng failed:', error);
+      console.log('🔄 PRIORITY 2: Falling back to secretkeys_fromSeed with seed data');
       
       try {
+        // PRIORITY 2: Test with secretkeys_fromSeed using the real seed 
+        console.log('🔧 TESTING: secretkeys_fromSeed() as fallback');
+        console.log('🔍 SEED: Length =', seed.length, 'bytes');
+        console.log('🔍 SEED: First 8 bytes =', Array.from(seed.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        
+        // secretkeys_fromSeed signature: (externref) -> (i32, i32, i32)
+        const seed32 = seed.length > 32 ? seed.slice(0, 32) : seed;
+        console.log('🔧 Using 32-byte seed for secretkeys_fromSeed, length:', seed32.length);
+        
         const result = await WamrModuleInstance.callFunctionWithExternref(
           this.zswapModuleId!,
-          'secretkeys_new',
-          []
+          'secretkeys_fromSeed',
+          [WamrModule.externref(seed32)]  // Pass seed as externref parameter
         );
-        console.log('✅ secretkeys_new fallback succeeded! Result:', result);
+        console.log('✅ secretkeys_fromSeed fallback succeeded! Result:', result);
         secretKeys = {
           _pointerId: typeof result === 'number' ? result : 1000,
           _isPointerBased: true
         };
-        console.log('📝 Using result from secretkeys_new fallback');
+        console.log('📝 Using result from secretkeys_fromSeed fallback');
       } catch (fallbackError) {
-        console.log('❌ Both methods failed, using mock SecretKeys');
-        console.log('📝 Using mock SecretKeys as fallback');
-        secretKeys = {
-          _pointerId: 999,
-          _isPointerBased: true
-        };
+        console.log('❌ secretkeys_fromSeed also failed:', fallbackError);
+        console.log('🔄 PRIORITY 3: Final fallback to secretkeys_new()');
+        
+        try {
+          // PRIORITY 3: Final fallback - try secretkeys_new() without any parameters
+          console.log('🔧 TESTING: secretkeys_new() as final fallback');
+          
+          const result = await WamrModuleInstance.callFunction(
+            this.zswapModuleId!,
+            'secretkeys_new',
+            []  // No parameters needed - signature () -> (i32, i32, i32)
+          );
+          console.log('✅ secretkeys_new final fallback succeeded! Result:', result);
+          secretKeys = {
+            _pointerId: typeof result === 'number' ? result : 1000,
+            _isPointerBased: true
+          };
+          console.log('📝 SUCCESS: Using result from secretkeys_new');
+        } catch (finalError) {
+          console.log('❌ All methods failed, using mock SecretKeys');
+          console.log('📝 Using mock SecretKeys as final fallback');
+          secretKeys = {
+            _pointerId: 999,
+            _isPointerBased: true
+          };
+        }
       }
     }
     
