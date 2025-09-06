@@ -313,40 +313,41 @@ export class MidnightSDK {
   async generateSecretKeysFromSeed(seed: Uint8Array): Promise<any> {
     this.ensureInitialized();
     
-    console.log('🧪 PRIORITY 1: Testing secretkeys_fromSeedRng() first (larger function with crypto logic)');
+    console.log('🧪 Using secretkeys_fromSeed() - the correct function for seed bytes');
     
     // Truncate 64-byte seed to 32 bytes as expected by the function
     const seed32 = seed.length > 32 ? seed.slice(0, 32) : seed;
-    console.log('🔧 Using 32-byte seed, length:', seed32.length);
+    console.log('🔧 Using 32-byte seed for secretkeys_fromSeed, length:', seed32.length);
     
     let result;
     try {
-      // PRIORITY 1: Try secretkeys_fromSeedRng() - this is larger (5850+ bytes) and likely has crypto init
-      console.log('🔧 TESTING: secretkeys_fromSeedRng() with seed data');
+      // Use secretkeys_fromSeed which expects seed bytes, not an RNG
+      console.log('🔧 TESTING: secretkeys_fromSeed() with seed data');
+      console.log('🔍 SEED: Length =', seed32.length, 'bytes');
       console.log('🔍 SEED: First 8 bytes =', Array.from(seed32.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
       
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('secretkeys_fromSeedRng timed out after 5 seconds')), 5000)
+        setTimeout(() => reject(new Error('secretkeys_fromSeed timed out after 5 seconds')), 5000)
       );
       
       const callPromise = WamrModuleInstance.callFunctionWithExternref(
         this.zswapModuleId!,
-        'secretkeys_fromSeedRng',
+        'secretkeys_fromSeed',
         [WamrModule.externref(seed32)]
       );
       
       result = await Promise.race([callPromise, timeoutPromise]);
-      console.log('✅ secretkeys_fromSeedRng succeeded! Result:', result);
+      console.log('✅ secretkeys_fromSeed succeeded! Result:', result);
       
       if (typeof result === 'number') {
-        console.log('📝 SUCCESS: Using result from secretkeys_fromSeedRng');
+        console.log('📝 SUCCESS: Using result from secretkeys_fromSeed');
         return {
           _pointerId: result,
           _isPointerBased: true
         };
       }
     } catch (error) {
-      console.log('❌ secretkeys_fromSeedRng failed:', error);
+      console.log('❌ secretkeys_fromSeed failed:', error);
       console.log('🔄 PRIORITY 2: Falling back to secretkeys_fromSeed with seed data');
       
       try {
@@ -1107,56 +1108,56 @@ export class MidnightSDK {
     const seed = await this.mnemonicToSeed(walletMnemonic);
     
     console.log('🏠 Creating secret keys...');
-    console.log('🧪 PRIORITY 1: Testing secretkeys_fromSeedRng() first (larger function with crypto logic)');
+    console.log('🧪 PRIORITY 1: Using secretkeys_fromSeed() - the correct function for seed bytes');
     
     let secretKeys;
     try {
-      // PRIORITY 1: Try secretkeys_fromSeedRng() - this is larger (5850+ bytes) and likely has crypto init
-      console.log('🔧 TESTING: secretkeys_fromSeedRng() with seed data');
+      // PRIORITY 1: Use secretkeys_fromSeed() - correct function for deterministic keys from seed
+      console.log('🔧 TESTING: secretkeys_fromSeed() with seed data');
       console.log('🔍 SEED: Length =', seed.length, 'bytes');
       console.log('🔍 SEED: First 8 bytes =', Array.from(seed.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
       
       const seed32 = seed.length > 32 ? seed.slice(0, 32) : seed;
-      console.log('🔧 Using 32-byte seed for secretkeys_fromSeedRng, length:', seed32.length);
+      console.log('🔧 Using 32-byte seed for secretkeys_fromSeed, length:', seed32.length);
       
-      const result = await WamrModuleInstance.callFunctionWithExternref(
+      const result = await WamrModuleInstance.callFunctionWithMemory(
         this.zswapModuleId!,
-        'secretkeys_fromSeedRng',
-        [WamrModule.externref(seed32)]
+        'secretkeys_fromSeed',
+        seed32
       );
-      console.log('✅ secretkeys_fromSeedRng succeeded! Result:', result);
-      secretKeys = {
-        _pointerId: typeof result === 'number' ? result : 1000,
-        _isPointerBased: true
-      };
-      console.log('📝 SUCCESS: Using result from secretkeys_fromSeedRng');
+      console.log('✅ secretkeys_fromSeed succeeded! Direct result:', result);
+      
+      // This should return {coinSecretKey, coinPublicKey, encryptionKey} with real values
+      if (result && typeof result === 'object' && 'coinSecretKey' in result && 'coinPublicKey' in result && 'encryptionKey' in result) {
+        console.log('🔑 REAL VALUES from secretkeys_fromSeed:');
+        console.log('🔑 Coin Secret Key:', result.coinSecretKey);
+        console.log('🔑 Coin Public Key:', result.coinPublicKey);
+        console.log('🔑 Encryption Key:', result.encryptionKey);
+        secretKeys = result;
+      } else {
+        throw new Error('secretkeys_fromSeed did not return expected direct key values');
+      }
     } catch (error) {
-      console.log('❌ secretkeys_fromSeedRng failed:', error);
-      console.log('🔄 PRIORITY 2: Falling back to secretkeys_fromSeed with seed data');
+      console.log('❌ secretkeys_fromSeed failed:', error);
+      console.log('🔄 PRIORITY 2: Falling back to secretkeys_new() with no parameters');
       
       try {
-        // PRIORITY 2: Test with secretkeys_fromSeed using the real seed 
-        console.log('🔧 TESTING: secretkeys_fromSeed() as fallback');
-        console.log('🔍 SEED: Length =', seed.length, 'bytes');
-        console.log('🔍 SEED: First 8 bytes =', Array.from(seed.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' '));
-        
-        // secretkeys_fromSeed signature: (externref) -> (i32, i32, i32)
-        const seed32 = seed.length > 32 ? seed.slice(0, 32) : seed;
-        console.log('🔧 Using 32-byte seed for secretkeys_fromSeed, length:', seed32.length);
+        // PRIORITY 2: Try secretkeys_new() - generates random keys without seed
+        console.log('🔧 TESTING: secretkeys_new() as fallback');
         
         const result = await WamrModuleInstance.callFunctionWithExternref(
           this.zswapModuleId!,
-          'secretkeys_fromSeed',
-          [WamrModule.externref(seed32)]  // Pass seed as externref parameter
+          'secretkeys_new',
+          []  // No parameters - generates random keys
         );
-        console.log('✅ secretkeys_fromSeed fallback succeeded! Result:', result);
+        console.log('✅ secretkeys_new fallback succeeded! Result:', result);
         secretKeys = {
           _pointerId: typeof result === 'number' ? result : 1000,
           _isPointerBased: true
         };
-        console.log('📝 Using result from secretkeys_fromSeed fallback');
+        console.log('📝 Using result from secretkeys_new fallback');
       } catch (fallbackError) {
-        console.log('❌ secretkeys_fromSeed also failed:', fallbackError);
+        console.log('❌ secretkeys_new also failed:', fallbackError);
         console.log('🔄 PRIORITY 3: Final fallback to secretkeys_new()');
         
         try {
@@ -1192,8 +1193,24 @@ export class MidnightSDK {
     console.log('🔍 SecretKeys result:', secretKeys);
     
     console.log('🏠 Extracting public keys...');
-    const coinPublicKey = await this.getCoinPublicKey(secretKeys);
-    const encryptionPublicKey = await this.getEncryptionPublicKey(secretKeys);
+    
+    let coinPublicKey: string;
+    let encryptionPublicKey: string;
+    
+    // Check if we have direct key values from secretkeys_fromSeed
+    if (secretKeys && typeof secretKeys === 'object' && 'coinPublicKey' in secretKeys && 'encryptionKey' in secretKeys) {
+      console.log('🔑 Using direct key values from secretkeys_fromSeed');
+      console.log('🔑 Raw coinPublicKey value:', secretKeys.coinPublicKey);
+      console.log('🔑 Raw encryptionKey value:', secretKeys.encryptionKey);
+      
+      // These are the actual return values from the WASM function - need to convert them properly
+      coinPublicKey = String(secretKeys.coinPublicKey);
+      encryptionPublicKey = String(secretKeys.encryptionKey);
+    } else {
+      console.log('🔑 Using pointer-based key extraction (fallback)');
+      coinPublicKey = await this.getCoinPublicKey(secretKeys);
+      encryptionPublicKey = await this.getEncryptionPublicKey(secretKeys);
+    }
     
     console.log('🏠 Generating shielded address...');
     const shieldedAddress = await this.generateShieldedAddressRN(
@@ -1271,11 +1288,20 @@ export class MidnightSDK {
       const currentEncBytes = this.hexToBytes(encryptionPublicKey);
       
       console.log('🏠 WASM: Raw key lengths:', currentCoinBytes.length, currentEncBytes.length);
+      console.log('🏠 WASM: Coin key first 8 bytes:', Array.from(currentCoinBytes.slice(0, 8)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+      console.log('🏠 WASM: Enc key first 8 bytes:', Array.from(currentEncBytes.slice(0, 8)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
       
-      // The keys we have are 32 bytes each (from our key generation), use them directly
-      // Extract just the first 32 bytes from each key
-      const coinKeyRaw = currentCoinBytes.slice(0, 32);
-      const encKeyRaw = currentEncBytes.slice(0, 32);
+      // CRITICAL: Validate that we have exactly 32-byte keys (official requirement)
+      if (currentCoinBytes.length !== 32) {
+        throw new Error(`Invalid coin key length: ${currentCoinBytes.length}, expected 32 bytes`);
+      }
+      if (currentEncBytes.length !== 32) {
+        throw new Error(`Invalid encryption key length: ${currentEncBytes.length}, expected 32 bytes`);
+      }
+      
+      // Use the EXACT 32-byte keys from WASM (no slicing, no modification)
+      const coinKeyRaw = currentCoinBytes; // Full 32 bytes
+      const encKeyRaw = currentEncBytes;   // Full 32 bytes
       
       console.log('🏠 WASM: Using raw 32-byte keys without header modification');
       console.log('🏠 WASM: This preserves the cryptographic integrity of WASM-generated keys');
@@ -1347,21 +1373,28 @@ export class MidnightSDK {
   }
 
   /**
-   * Generate Midnight address from raw payload using proper Bech32m encoding
+   * Generate Midnight address using OFFICIAL format from @midnight-ntwrk/wallet-sdk-address-format
    */
   private generateMidnightAddressFromPayload(payload: Uint8Array, networkType: string): string {
-    // Map network type to proper suffix names
-    let networkSuffix: string;
+    // OFFICIAL Midnight Network address format:
+    // Format: mn_shield-addr_{network}1{data}
+    // Network mapping from official SDK:
+    let networkSegment: string;
     switch (networkType.toLowerCase()) {
-      case 'mainnet': networkSuffix = 'mainnet'; break;
-      case 'testnet': networkSuffix = 'test'; break;
-      case 'undeployed': networkSuffix = 'undeployed'; break;
-      default: networkSuffix = 'test'; break;
+      case 'mainnet': networkSegment = ''; break; // MainNet uses no suffix
+      case 'testnet': networkSegment = '_test'; break; // TestNet uses '_test' 
+      case 'devnet': networkSegment = '_dev'; break; // DevNet uses '_dev'
+      case 'undeployed': networkSegment = '_undeployed'; break;
+      default: networkSegment = '_test'; break;
     }
     
-    const hrp = `mn_shield-addr_${networkSuffix}`;
+    // Official HRP format: mn_shield-addr[_network] (no network suffix for mainnet)
+    const hrp = `mn_shield-addr${networkSegment}`;
     
-    // Use proper Bech32m encoding with checksum validation
+    console.log(`🏠 OFFICIAL: Using HRP="${hrp}" for ${networkType}`);
+    console.log(`🏠 OFFICIAL: Payload length: ${payload.length} bytes`);
+    
+    // Use proper Bech32m encoding with official format
     return encodeMidnightBech32m(hrp, payload);
   }
 

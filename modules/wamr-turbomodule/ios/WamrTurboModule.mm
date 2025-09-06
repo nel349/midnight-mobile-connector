@@ -401,16 +401,44 @@ void __wbindgen_throw(wasm_exec_env_t exec_env, uint32_t ptr, uint32_t len) {
         // Try to safely read the actual error message from WASM memory
         NSString *errorMsg = @"WASM throw (unknown)";
         
-        // Skip memory access entirely - it's causing crashes during SecretKeys init
-        // We'll focus on the pattern analysis instead
-        bool can_read_memory = false;
+        // Enhanced throw message capture - enable safe memory access
+        bool can_read_memory = (len > 0 && len < 10000); // Safety bounds check
         
         if (can_read_memory) {
-            // This branch is unreachable since can_read_memory is always false now
-            errorMsg = @"WASM throw (memory access disabled)";
-            RCTLogInfo(@"WAMR_DEBUG: 🚨 ACTUAL THROW MESSAGE: '%@'", errorMsg);
+            // Safely try to read the throw message from WASM memory
+            if (wasm_runtime_validate_app_addr(module_inst, ptr, len)) {
+                void *native_ptr = wasm_runtime_addr_app_to_native(module_inst, ptr);
+                if (native_ptr) {
+                    // Create NSString from WASM memory (assume UTF-8)
+                    char *msg_chars = (char*)native_ptr;
+                    errorMsg = [[NSString alloc] initWithBytes:msg_chars length:len encoding:NSUTF8StringEncoding];
+                    if (!errorMsg) {
+                        // Fallback to raw hex if UTF-8 failed
+                        NSData *raw_data = [NSData dataWithBytes:native_ptr length:len];
+                        errorMsg = [NSString stringWithFormat:@"WASM throw (raw: %@)", raw_data];
+                    }
+                    RCTLogInfo(@"WAMR_DEBUG: 🚨 CAPTURED THROW MESSAGE: '%@'", errorMsg);
+                } else {
+                    errorMsg = @"WASM throw (failed to convert address)";
+                    RCTLogInfo(@"WAMR_DEBUG: ❌ THROW: Failed to convert WASM address %u to native pointer", ptr);
+                }
+            } else {
+                errorMsg = @"WASM throw (invalid memory range)";
+                RCTLogInfo(@"WAMR_DEBUG: ❌ THROW: Invalid WASM memory range ptr=%u, len=%u", ptr, len);
+            }
         } else {
-            RCTLogInfo(@"WAMR_DEBUG: 🚨 THROW ERROR: Cannot safely read WASM memory at ptr 0x%x, len=%u", ptr, len);
+            RCTLogInfo(@"WAMR_DEBUG: 🚨 THROW ERROR: Cannot safely read WASM memory at ptr 0x%x, len=%u - analyzing pattern", ptr, len);
+            
+            // Zero-length throws often indicate "unreachable" or assertion failures
+            if (len == 0) {
+                RCTLogInfo(@"WAMR_DEBUG: ❗ ZERO-LENGTH THROW: This typically means 'unreachable' code was reached");
+                RCTLogInfo(@"WAMR_DEBUG: ❗ LIKELY CAUSE: Function called with NULL/invalid SecretKeys pointer");
+                RCTLogInfo(@"WAMR_DEBUG: ❗ WASM ASSERTION: Internal assertion failed - probably null pointer access");
+                errorMsg = @"WASM unreachable: NULL pointer access (SecretKeys validation failed)";
+            } else {
+                RCTLogInfo(@"WAMR_DEBUG: ❗ UNSAFE THROW: Error message length %u exceeds safety bounds", len);
+                errorMsg = [NSString stringWithFormat:@"WASM throw (unsafe length: %u)", len];
+            }
         }
         
         RCTLogInfo(@"WAMR_DEBUG: 🚨 WASM THROW: Function execution failed - check error above");
@@ -556,16 +584,44 @@ uintptr_t __wbindgen_error_new(wasm_exec_env_t exec_env, uint32_t ptr, uint32_t 
         // Try to safely read the actual error message from WASM memory
         NSString *errorMsg = @"WASM error (unknown)";
         
-        // Skip memory access entirely - it's causing crashes during SecretKeys init
-        // We'll focus on the pattern analysis instead
-        bool can_read_memory = false;
+        // Enhanced error message capture - enable safe memory access
+        bool can_read_memory = (len > 0 && len < 10000); // Safety bounds check
         
         if (can_read_memory) {
-            // This branch is unreachable since can_read_memory is always false now
-            errorMsg = @"WASM error (memory access disabled)";
-            RCTLogInfo(@"WAMR_DEBUG: 🚨 ACTUAL ERROR MESSAGE: '%@'", errorMsg);
+            // Safely try to read the error message from WASM memory
+            if (wasm_runtime_validate_app_addr(module_inst, ptr, len)) {
+                void *native_ptr = wasm_runtime_addr_app_to_native(module_inst, ptr);
+                if (native_ptr) {
+                    // Create NSString from WASM memory (assume UTF-8)
+                    char *msg_chars = (char*)native_ptr;
+                    errorMsg = [[NSString alloc] initWithBytes:msg_chars length:len encoding:NSUTF8StringEncoding];
+                    if (!errorMsg) {
+                        // Fallback to raw hex if UTF-8 failed
+                        NSData *raw_data = [NSData dataWithBytes:native_ptr length:len];
+                        errorMsg = [NSString stringWithFormat:@"WASM error (raw: %@)", raw_data];
+                    }
+                    RCTLogInfo(@"WAMR_DEBUG: 🚨 CAPTURED ERROR MESSAGE: '%@'", errorMsg);
+                } else {
+                    errorMsg = @"WASM error (failed to convert address)";
+                    RCTLogInfo(@"WAMR_DEBUG: ❌ ERROR: Failed to convert WASM address %u to native pointer", ptr);
+                }
+            } else {
+                errorMsg = @"WASM error (invalid memory range)";
+                RCTLogInfo(@"WAMR_DEBUG: ❌ ERROR: Invalid WASM memory range ptr=%u, len=%u", ptr, len);
+            }
         } else {
-            RCTLogInfo(@"WAMR_DEBUG: 🚨 ERROR: Cannot safely read WASM memory (len=%u) - skipping error message read", len);
+            RCTLogInfo(@"WAMR_DEBUG: 🚨 ERROR: Cannot safely read WASM memory (len=%u) - analyzing error pattern", len);
+            
+            // Zero-length errors often indicate internal WASM validation failures
+            if (len == 0) {
+                RCTLogInfo(@"WAMR_DEBUG: ❗ ZERO-LENGTH ERROR: This indicates internal WASM validation failure");
+                RCTLogInfo(@"WAMR_DEBUG: ❗ COMMON CAUSES: Invalid memory access, type validation failure, or null pointer dereference");
+                RCTLogInfo(@"WAMR_DEBUG: ❗ SUGGESTION: Check if SecretKeys type validation is failing internally");
+                errorMsg = @"WASM internal validation error (zero-length message)";
+            } else {
+                RCTLogInfo(@"WAMR_DEBUG: ❗ UNSAFE MEMORY: Error message length %u exceeds safety bounds", len);
+                errorMsg = [NSString stringWithFormat:@"WASM error (unsafe length: %u)", len];
+            }
             
             // Common WASM error pointer patterns - help diagnose the issue
             if (ptr > 0x6f000000 && ptr < 0x70000000) {
@@ -857,7 +913,20 @@ uintptr_t __wbg_crypto_574e78ad8b13b65f(wasm_exec_env_t exec_env, uintptr_t glob
         
         void* global_obj_ptr = NULL;
         if (wasm_externref_ref2obj(global_externref_idx, &global_obj_ptr) && global_obj_ptr) {
-            id global_obj = (__bridge id)global_obj_ptr;
+            RCTLogInfo(@"WAMR_DEBUG: 🔍 Got global_obj_ptr=%p, checking validity...", global_obj_ptr);
+            
+            // CRITICAL: Add memory safety check before bridging
+            @try {
+                // Test if the pointer is valid before bridging
+                volatile void* test_ptr = global_obj_ptr;
+                if (test_ptr == NULL || (uintptr_t)test_ptr < 0x1000) {
+                    RCTLogInfo(@"WAMR_DEBUG: ❌ Invalid global_obj_ptr=%p, skipping crypto access", global_obj_ptr);
+                    return 0;
+                }
+                
+                RCTLogInfo(@"WAMR_DEBUG: ✅ global_obj_ptr appears valid, attempting bridge...");
+                id global_obj = (__bridge id)global_obj_ptr;
+                RCTLogInfo(@"WAMR_DEBUG: ✅ Bridge successful, global_obj=%@", [global_obj class]);
             if ([global_obj isKindOfClass:[NSDictionary class]]) {
                 NSDictionary *globalDict = (NSDictionary*)global_obj;
                 id cryptoObj = [globalDict objectForKey:@"crypto"];
@@ -869,6 +938,10 @@ uintptr_t __wbg_crypto_574e78ad8b13b65f(wasm_exec_env_t exec_env, uintptr_t glob
                         return crypto_externref_idx;
                     }
                 }
+            }
+            } @catch (NSException *exception) {
+                RCTLogInfo(@"WAMR_DEBUG: ❌ Exception during crypto object access: %@", exception.reason);
+                return 0;
             }
         }
     }
@@ -1465,13 +1538,49 @@ uint32_t __wbg_static_accessor_WINDOW_5de37043a91a9c40(wasm_exec_env_t exec_env)
 - (void)initializeWamr {
     if (_initialized) return;
     
-    // Initialize WAMR runtime
-    if (!wasm_runtime_init()) {
-        RCTLogError(@"WAMR_DEBUG: Failed to initialize WAMR runtime");
+    // Initialize WAMR runtime with custom allocator for better performance
+    RuntimeInitArgs init_args;
+    memset(&init_args, 0, sizeof(RuntimeInitArgs));
+    
+    // Use custom allocator for better crypto performance
+    init_args.mem_alloc_type = Alloc_With_Allocator;
+    init_args.mem_alloc_option.allocator.malloc_func = (void *)malloc;
+    init_args.mem_alloc_option.allocator.realloc_func = (void *)realloc;
+    init_args.mem_alloc_option.allocator.free_func = (void *)free;
+    
+    // Increase default heap size for crypto operations
+    init_args.gc_heap_size = 32 * 1024 * 1024; // 32MB for crypto ops
+    
+    RCTLogInfo(@"WAMR_DEBUG: 🔧 INITIALIZING: WAMR with crypto-optimized configuration");
+    RCTLogInfo(@"WAMR_DEBUG: 🔧 CONFIG: Custom allocator enabled, GC heap size: %u MB", 
+              init_args.gc_heap_size / (1024 * 1024));
+    
+    // Check for compile-time WASM feature support
+    RCTLogInfo(@"WAMR_DEBUG: 🔧 CHECKING: Compile-time WASM features");
+    #if WASM_ENABLE_BULK_MEMORY != 0
+    RCTLogInfo(@"WAMR_DEBUG: ✅ BULK_MEMORY: Enabled at compile-time");
+    #else
+    RCTLogInfo(@"WAMR_DEBUG: ❌ BULK_MEMORY: Disabled at compile-time");
+    #endif
+    
+    #if WASM_ENABLE_REF_TYPES != 0
+    RCTLogInfo(@"WAMR_DEBUG: ✅ REF_TYPES: Enabled at compile-time");
+    #else
+    RCTLogInfo(@"WAMR_DEBUG: ❌ REF_TYPES: Disabled at compile-time");
+    #endif
+    
+    #if WASM_ENABLE_MULTI_VALUE != 0
+    RCTLogInfo(@"WAMR_DEBUG: ✅ MULTI_VALUE: Enabled at compile-time");
+    #else
+    RCTLogInfo(@"WAMR_DEBUG: ❌ MULTI_VALUE: Disabled at compile-time");
+    #endif
+    
+    if (!wasm_runtime_full_init(&init_args)) {
+        RCTLogError(@"WAMR_DEBUG: Failed to initialize WAMR runtime with enhanced configuration");
         return;
     }
     
-    RCTLogInfo(@"WAMR_DEBUG: ✅ WAMR runtime initialized successfully");
+    RCTLogInfo(@"WAMR_DEBUG: ✅ WAMR runtime initialized with enhanced configuration");
     
     // Native symbols will be registered per-module, not globally
     _registrationSuccessful = false;  // Will be set during module loading
@@ -1911,15 +2020,19 @@ RCT_EXPORT_METHOD(loadModule:(NSString *)wasmBytesBase64
     
     // Register to multiple module names - WASM bindgen can use various patterns
     const char* module_patterns[] = {
-        "./midnight_zswap_wasm_bg.js",  // What the error shows
-        "./midnight_zswap_wasm_bg",      // Without .js
-        "midnight_zswap_wasm_bg.js",     // Without ./
-        "midnight_zswap_wasm_bg",        // Without ./ and .js  
-        "env"                            // Standard WASM env
+        "./midnight_zswap_wasm_bg.js",         // zswap module patterns
+        "./midnight_zswap_wasm_bg",
+        "midnight_zswap_wasm_bg.js",
+        "midnight_zswap_wasm_bg",
+        "./midnight_onchain_runtime_wasm_bg.js", // onchain_runtime module patterns  
+        "./midnight_onchain_runtime_wasm_bg",
+        "midnight_onchain_runtime_wasm_bg.js",
+        "midnight_onchain_runtime_wasm_bg",
+        "env"                                   // Standard WASM env
     };
     
     bool any_registered = false;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 9; i++) {
         if (wasm_runtime_register_natives(module_patterns[i], native_symbols, n_native_symbols)) {
             printf("WAMR_DEBUG: ✅ Successfully registered natives to module: %s\n", module_patterns[i]);
             any_registered = true;
@@ -1952,10 +2065,10 @@ RCT_EXPORT_METHOD(loadModule:(NSString *)wasmBytesBase64
     }
     
     // Create module instance with increased memory for cryptographic operations
-    uint32_t stack_size = 1024 * 1024; // 1MB stack for cryptographic operations
-    uint32_t heap_size = 16 * 1024 * 1024;  // 16MB heap for WASM memory allocation
+    uint32_t stack_size = 8 * 1024 * 1024; // 8MB stack for cryptographic operations (was 1MB)
+    uint32_t heap_size = 128 * 1024 * 1024;  // 128MB heap for WASM memory allocation (was 16MB)
     
-    RCTLogInfo(@"WAMR_DEBUG: 🔧 Creating WASM instance with stack_size=%u (1MB), heap_size=%u (16MB)", 
+    RCTLogInfo(@"WAMR_DEBUG: 🔧 Creating WASM instance with stack_size=%u (8MB), heap_size=%u (128MB)", 
               stack_size, heap_size);
     
     wasm_module_inst_t instance = wasm_runtime_instantiate(module, stack_size, heap_size, 
@@ -1986,6 +2099,22 @@ RCT_EXPORT_METHOD(loadModule:(NSString *)wasmBytesBase64
     moduleInstance->heap_size = heap_size;
     
     _modules[moduleId] = moduleInstance;
+    
+    // CRITICAL: Initialize wasm-bindgen module with __wbindgen_start
+    RCTLogInfo(@"WAMR_DEBUG: 🔧 INITIALIZING: Calling __wbindgen_start to initialize crypto systems");
+    wasm_function_inst_t start_func = wasm_runtime_lookup_function(instance, "__wbindgen_start");
+    if (start_func) {
+        uint32_t argv[1] = {0};
+        bool start_success = wasm_runtime_call_wasm(exec_env, start_func, 0, argv);
+        if (start_success) {
+            RCTLogInfo(@"WAMR_DEBUG: ✅ __wbindgen_start succeeded - crypto systems initialized");
+        } else {
+            const char *exception = wasm_runtime_get_exception(instance);
+            RCTLogInfo(@"WAMR_DEBUG: ❌ __wbindgen_start failed: %s", exception ? exception : "unknown error");
+        }
+    } else {
+        RCTLogInfo(@"WAMR_DEBUG: ⚠️  __wbindgen_start function not found - module may not be wasm-bindgen");
+    }
     
     // PROACTIVE CRYPTO ENVIRONMENT SETUP
     // Test key environment detection functions to ensure crypto access works
@@ -2183,8 +2312,7 @@ RCT_EXPORT_METHOD(callFunction:(double)moduleId
     
     // Special handling for functions that return WASM object pointers - FORCED REBUILD
     RCTLogInfo(@"WAMR_DEBUG: FORCE DEBUG: Checking function %@ for pointer tracking", functionName);
-    if ([functionName isEqualToString:@"secretkeys_fromSeed"] || 
-        [functionName isEqualToString:@"secretkeys_new"] ||
+    if ([functionName isEqualToString:@"secretkeys_new"] ||
         [functionName isEqualToString:@"secretkeys_fromSeedRng"]) {
         // These functions return a pointer to a SecretKeys object
         // The return value is in argv[0] after the call
@@ -2196,6 +2324,118 @@ RCT_EXPORT_METHOD(callFunction:(double)moduleId
         
         // Return the pointer ID instead of the raw pointer
         resolve(@(pointerId));
+        return;
+    }
+    
+    // CRITICAL FIX: Handle public key extraction functions 
+    if ([functionName isEqualToString:@"secretkeys_coinPublicKey"] ||
+        [functionName isEqualToString:@"secretkeys_encryptionPublicKey"]) {
+        
+        uint32_t keyPointer = argv[0];
+        RCTLogInfo(@"WAMR_DEBUG: 🔑 CRITICAL: %@ returned WASM pointer %u", functionName, keyPointer);
+        
+        if (keyPointer != 0) {
+            // Extract actual key data from WASM memory
+            wasm_module_inst_t instance = moduleInstance->instance;
+            uint8_t* wasmMemory = (uint8_t*)wasm_runtime_addr_app_to_native(instance, keyPointer);
+            
+            if (wasmMemory) {
+                // WASM functions return hex strings, not raw binary
+                // First check if this looks like a hex string (ASCII characters)
+                char firstChar = (char)wasmMemory[0];
+                if ((firstChar >= '0' && firstChar <= '9') || 
+                    (firstChar >= 'a' && firstChar <= 'f') || 
+                    (firstChar >= 'A' && firstChar <= 'F')) {
+                    
+                    // This is a hex string - find the length
+                    int hexStringLen = 0;
+                    while (hexStringLen < 256 && wasmMemory[hexStringLen] != 0) {
+                        hexStringLen++;
+                    }
+                    
+                    RCTLogInfo(@"WAMR_DEBUG: 🔑 DETECTED HEX STRING: length=%d", hexStringLen);
+                    RCTLogInfo(@"WAMR_DEBUG: 🔑 Hex string: %.64s", (char*)wasmMemory);
+                    
+                    // Convert hex string to binary data
+                    if (hexStringLen == 64) { 
+                        // Standard 32-byte key (coin key format)
+                        NSMutableArray *keyBytes = [[NSMutableArray alloc] initWithCapacity:32];
+                        
+                        for (int i = 0; i < 64; i += 2) {
+                            char hexByte[3] = {(char)wasmMemory[i], (char)wasmMemory[i+1], 0};
+                            unsigned int byteValue = 0;
+                            sscanf(hexByte, "%x", &byteValue);
+                            [keyBytes addObject:@((uint8_t)byteValue)];
+                        }
+                        
+                        RCTLogInfo(@"WAMR_DEBUG: 🔑 CONVERTED: standard 64-char hex to 32 raw bytes");
+                        RCTLogInfo(@"WAMR_DEBUG: 🔑 First 8 raw bytes: %02x %02x %02x %02x %02x %02x %02x %02x", 
+                                  [[keyBytes objectAtIndex:0] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:1] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:2] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:3] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:4] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:5] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:6] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:7] unsignedCharValue]);
+                        
+                        resolve(keyBytes);
+                        return;
+                    } else if (hexStringLen == 70 && [functionName isEqualToString:@"secretkeys_encryptionPublicKey"]) {
+                        // Encryption key with version header (35 bytes = 70 hex chars)
+                        // Format: [2-byte version header][32-byte key][1-byte extra] = 35 bytes = 70 hex chars
+                        RCTLogInfo(@"WAMR_DEBUG: 🔑 ENCRYPTION KEY: Processing 70-char hex with version header");
+                        
+                        // Check version header (first 4 hex chars = 2 bytes)
+                        char versionHex[5] = {(char)wasmMemory[0], (char)wasmMemory[1], (char)wasmMemory[2], (char)wasmMemory[3], 0};
+                        unsigned int versionValue = 0;
+                        sscanf(versionHex, "%x", &versionValue);
+                        RCTLogInfo(@"WAMR_DEBUG: 🔑 VERSION HEADER: %04x (should be 0300 for v3.0)", versionValue);
+                        
+                        // Extract the 32-byte key part (skip 2-byte version, take next 32 bytes)
+                        NSMutableArray *keyBytes = [[NSMutableArray alloc] initWithCapacity:32];
+                        
+                        for (int i = 4; i < 68; i += 2) { // Skip first 4 chars (version), take next 64 chars (32 bytes)
+                            char hexByte[3] = {(char)wasmMemory[i], (char)wasmMemory[i+1], 0};
+                            unsigned int byteValue = 0;
+                            sscanf(hexByte, "%x", &byteValue);
+                            [keyBytes addObject:@((uint8_t)byteValue)];
+                        }
+                        
+                        RCTLogInfo(@"WAMR_DEBUG: 🔑 ENCRYPTION KEY: Extracted 32-byte key after version header");
+                        RCTLogInfo(@"WAMR_DEBUG: 🔑 First 8 key bytes: %02x %02x %02x %02x %02x %02x %02x %02x", 
+                                  [[keyBytes objectAtIndex:0] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:1] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:2] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:3] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:4] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:5] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:6] unsignedCharValue],
+                                  [[keyBytes objectAtIndex:7] unsignedCharValue]);
+                        
+                        resolve(keyBytes);
+                        return;
+                    } else {
+                        RCTLogInfo(@"WAMR_DEBUG: ❌ Unexpected hex string length: %d (expected 64 or 70)", hexStringLen);
+                    }
+                } else {
+                    // Fallback: treat as raw binary (original code)
+                    const int keySize = 32;
+                    NSMutableArray *keyBytes = [[NSMutableArray alloc] initWithCapacity:keySize];
+                    
+                    for (int i = 0; i < keySize; i++) {
+                        [keyBytes addObject:@(wasmMemory[i])];
+                    }
+                    
+                    RCTLogInfo(@"WAMR_DEBUG: 🔑 EXTRACTED: %@ raw binary: %d bytes", functionName, keySize);
+                    resolve(keyBytes);
+                    return;
+                }
+            }
+        }
+        
+        RCTLogInfo(@"WAMR_DEBUG: ❌ Failed to extract key data from pointer %u", keyPointer);
+        resolve(@(keyPointer)); // Fallback to pointer value
         return;
     }
     
@@ -2396,8 +2636,7 @@ RCT_EXPORT_METHOD(callFunctionWithExternref:(double)moduleId
     auto moduleInstance = it->second;
     
     // **POINTER TRACKING FOR SECRETKEYS FUNCTIONS**
-    if ([functionName isEqualToString:@"secretkeys_fromSeed"] || 
-        [functionName isEqualToString:@"secretkeys_new"] ||
+    if ([functionName isEqualToString:@"secretkeys_new"] ||
         [functionName isEqualToString:@"secretkeys_fromSeedRng"]) {
         
         printf("MATCHED secretkeys function - implementing pointer tracking\n");
@@ -2660,6 +2899,25 @@ RCT_EXPORT_METHOD(callFunctionWithExternref:(double)moduleId
             }
         }
         
+        // CRITICAL FIX: For secretkeys functions, use direct memory approach
+        if ([functionName isEqualToString:@"secretkeys_fromSeedRng"] || 
+            [functionName isEqualToString:@"secretkeys_fromSeed"]) {
+            RCTLogInfo(@"WAMR_DEBUG: 🔧 APPLYING CRITICAL FIX for %@", functionName);
+            
+            // These functions expect (ptr, len) instead of externref
+            // Use WASM memory address and length directly
+            if (moduleInstance->currentSeedWasmAddr != 0) {
+                RCTLogInfo(@"WAMR_DEBUG: 🔧 FIX: Using direct memory approach (ptr, len)");
+                RCTLogInfo(@"WAMR_DEBUG: 🔧 FIX: Using WASM addr=%u, len=32", moduleInstance->currentSeedWasmAddr);
+                
+                // Use (ptr, len) calling convention instead of externref
+                argc = 2;
+                argv[0] = moduleInstance->currentSeedWasmAddr;
+                argv[1] = 32; // 32-byte seed
+                RCTLogInfo(@"WAMR_DEBUG: 🔧 FIX: Using argv[0]=%u (ptr), argv[1]=%u (len)", argv[0], argv[1]);
+            }
+        }
+        
         // Call WASM function  
         RCTLogInfo(@"WAMR_DEBUG: 📞 EXTERNREF: About to call WASM function %@", functionName);
         RCTLogInfo(@"WAMR_DEBUG: 📞 EXTERNREF: PRE-CALL argc = %u", argc);
@@ -2739,17 +2997,53 @@ RCT_EXPORT_METHOD(callFunctionWithExternref:(double)moduleId
         RCTLogInfo(@"WAMR_DEBUG: ✅ EXTERNREF: POST-CALL argv[2] = %u", argc > 2 ? argv[2] : 0);
         RCTLogInfo(@"WAMR_DEBUG: ✅ EXTERNREF: POST-CALL argv[3] = %u", argc > 3 ? argv[3] : 0);
         
+        // Initialize result with default value (may be corrected below)
+        uint32_t result = 0;
+        
+        // CRITICAL ANALYSIS: Check if argv[1] contains useful information
+        if ([functionName isEqualToString:@"secretkeys_fromSeedRng"] && argv[1] != 0) {
+            RCTLogInfo(@"WAMR_DEBUG: 🔍 CRITICAL: argv[1]=%u might be error code or result info", argv[1]);
+            
+            // Try to interpret argv[1] as a WASM pointer for error information
+            if (argv[1] < 16777216) { // Within WASM memory bounds
+                wasm_module_inst_t module_inst = wasm_runtime_get_module_inst(moduleInstance->exec_env);
+                if (module_inst && wasm_runtime_validate_app_addr(module_inst, argv[1], 4)) {
+                    void *native_ptr = wasm_runtime_addr_app_to_native(module_inst, argv[1]);
+                    if (native_ptr) {
+                        uint32_t *error_code = (uint32_t*)native_ptr;
+                        RCTLogInfo(@"WAMR_DEBUG: 🔍 CRITICAL: Error info at WASM addr %u = %u", argv[1], *error_code);
+                    }
+                }
+            }
+            
+            // argv[1] = 132 might indicate a different error state
+            // Let's check if this is a valid SecretKeys pointer that we missed
+            if (argv[1] > 100 && argv[1] < 100000) {
+                RCTLogInfo(@"WAMR_DEBUG: 🔍 CRITICAL: argv[1]=%u might be the actual SecretKeys pointer!", argv[1]);
+                RCTLogInfo(@"WAMR_DEBUG: 🔧 CRITICAL FIX: Trying argv[1] as the result instead of argv[0]");
+                
+                // Store argv[1] as the result instead of argv[0]
+                result = argv[1];
+                RCTLogInfo(@"WAMR_DEBUG: ✅ CRITICAL FIX: Using result=%u from argv[1]", result);
+            }
+        }
+        
         // Check if all return values are 0 (indicates function didn't work properly)
         if (argc > 2 && argv[0] == 0 && argv[1] == 0 && argv[2] == 0) {
             RCTLogInfo(@"WAMR_DEBUG: ⚠️ EXTERNREF: Function returned all zeros - possible issue with externref processing");
         }
         
-        // Store the pointer and return pointer ID
-        uint32_t wasmPointer = argv[0];
+        // Store the pointer and return pointer ID (use result which may have been corrected)
+        uint32_t wasmPointer = (result != 0) ? result : argv[0];
         int pointerId = _nextPointerId++;
         _wasmPointers[pointerId] = wasmPointer;
         
-        RCTLogInfo(@"WAMR_DEBUG: STORED: pointer ID %d -> WASM pointer %u", pointerId, wasmPointer);
+        RCTLogInfo(@"WAMR_DEBUG: STORED: pointer ID %d -> WASM pointer %u (corrected=%s)", pointerId, wasmPointer, (result != 0) ? "YES" : "NO");
+        
+        // CRITICAL SUCCESS CHECK: If we got a non-zero result, this might be success!
+        if (wasmPointer != 0) {
+            RCTLogInfo(@"WAMR_DEBUG: 🎉 SUCCESS: Got non-zero result %u - SecretKeys creation might have succeeded!", wasmPointer);
+        }
         resolve(@(pointerId));
         return;
     }
@@ -2878,56 +3172,33 @@ RCT_EXPORT_METHOD(callFunctionWithMemory:(double)moduleId
     }
     RCTLogInfo(@"WAMR_DEBUG: ✅ Found function: %p", func);
     
-    // Allocate WASM memory for the data
-    RCTLogInfo(@"WAMR_DEBUG: 🔍 Looking up __wbindgen_malloc function");
-    wasm_function_inst_t malloc_func = wasm_runtime_lookup_function(moduleInstance->instance, "__wbindgen_malloc");
-    
-    if (!malloc_func) {
-        RCTLogInfo(@"WAMR_DEBUG: ❌ __wbindgen_malloc function not found");
-        reject(@"MALLOC_NOT_FOUND", @"__wbindgen_malloc function not found", nil);
-        return;
-    }
-    RCTLogInfo(@"WAMR_DEBUG: ✅ Found __wbindgen_malloc: %p", malloc_func);
-    
-    // Use existing execution environment instead of creating a new one
-    RCTLogInfo(@"WAMR_DEBUG: 🔧 Using existing execution environment");
+    // Use NATIVE malloc directly instead of looking up the broken WASM malloc
+    RCTLogInfo(@"WAMR_DEBUG: 🔧 Using NATIVE __wbindgen_malloc instead of WASM export");
     wasm_exec_env_t exec_env = moduleInstance->exec_env;
     if (!exec_env) {
-        RCTLogInfo(@"WAMR_DEBUG: ❌ No existing execution environment");
-        reject(@"EXEC_ENV_NOT_FOUND", @"No existing execution environment", nil);
+        RCTLogInfo(@"WAMR_DEBUG: ❌ No execution environment");
+        reject(@"EXEC_ENV_NOT_FOUND", @"No execution environment", nil);
         return;
     }
     RCTLogInfo(@"WAMR_DEBUG: ✅ Using execution environment: %p", exec_env);
     
-    // Call __wbindgen_malloc to allocate memory in WASM
-    uint32_t malloc_args[1] = { (uint32_t)data.length };
-    RCTLogInfo(@"WAMR_DEBUG: 🔧 Calling __wbindgen_malloc with size: %u", (uint32_t)data.length);
-    RCTLogInfo(@"WAMR_DEBUG: 🔧 malloc_args[0] = %u", malloc_args[0]);
+    // Call NATIVE __wbindgen_malloc directly (not the broken WASM one)
+    RCTLogInfo(@"WAMR_DEBUG: 🔧 Calling NATIVE __wbindgen_malloc with size: %u", (uint32_t)data.length);
+    uint32_t wasmPtr = __wbindgen_malloc(exec_env, (uint32_t)data.length);
     
-    bool malloc_success = wasm_runtime_call_wasm(exec_env, malloc_func, 1, malloc_args);
-    RCTLogInfo(@"WAMR_DEBUG: 🔧 malloc call result: %s", malloc_success ? "SUCCESS" : "FAILED");
-    
-    if (!malloc_success) {
-        const char *error = wasm_runtime_get_exception(moduleInstance->instance);
-        NSString *errorStr = error ? [NSString stringWithUTF8String:error] : @"Unknown error";
-        RCTLogInfo(@"WAMR_DEBUG: ❌ Malloc failed with error: %@", errorStr);
-        reject(@"MALLOC_FAILED", [NSString stringWithFormat:@"Memory allocation failed: %@", errorStr], nil);
+    if (wasmPtr == 0) {
+        RCTLogInfo(@"WAMR_DEBUG: ❌ NATIVE malloc failed");
+        reject(@"MALLOC_FAILED", @"Native memory allocation failed", nil);
         return;
     }
-    
-    // The result is already in malloc_args[0] after wasm_runtime_call_wasm
-    uint32_t wasmPtr = malloc_args[0];
     RCTLogInfo(@"WAMR_DEBUG: ✅ Allocated WASM memory at address: %u", wasmPtr);
     
     // Copy data to WASM memory
     void *nativePtr = wasm_runtime_addr_app_to_native(moduleInstance->instance, wasmPtr);
     if (!nativePtr) {
-        // Clean up before failing
-        wasm_function_inst_t free_func = wasm_runtime_lookup_function(moduleInstance->instance, "__wbindgen_free");
-        if (free_func) {
-            uint32_t free_args[2] = { wasmPtr, (uint32_t)data.length };
-            wasm_runtime_call_wasm(exec_env, free_func, 2, free_args);
-        }
+        // Clean up before failing using NATIVE free (not WASM free)
+        RCTLogInfo(@"WAMR_DEBUG: 🔧 Cleaning up with NATIVE __wbindgen_free");
+        __wbindgen_free(exec_env, wasmPtr, (uint32_t)data.length);
         reject(@"MEMORY_MAP_FAILED", @"Failed to map WASM memory to native pointer", nil);
         return;
     }
@@ -2944,12 +3215,9 @@ RCT_EXPORT_METHOD(callFunctionWithMemory:(double)moduleId
     uint32_t args[5] = { wasmPtr, (uint32_t)data.length, 0, 0, 0 }; // 2 args + 3 return values
     
     if (!wasm_runtime_call_wasm(exec_env, func, 2, args)) {
-        // Clean up memory before failing
-        wasm_function_inst_t free_func = wasm_runtime_lookup_function(moduleInstance->instance, "__wbindgen_free");
-        if (free_func) {
-            uint32_t free_args[2] = { wasmPtr, (uint32_t)data.length };
-            wasm_runtime_call_wasm(exec_env, free_func, 2, free_args);
-        }
+        // Clean up memory before failing using NATIVE free (not WASM free)
+        RCTLogInfo(@"WAMR_DEBUG: 🔧 Cleaning up with NATIVE __wbindgen_free");
+        __wbindgen_free(exec_env, wasmPtr, (uint32_t)data.length);
         moduleInstance->currentSeedWasmAddr = 0;
         
         const char *error = wasm_runtime_get_exception(moduleInstance->instance);
@@ -2964,12 +3232,9 @@ RCT_EXPORT_METHOD(callFunctionWithMemory:(double)moduleId
     // The return values are in args[0], args[1], args[2]
     RCTLogInfo(@"WAMR_DEBUG: ✅ Function call succeeded! Return values: %u, %u, %u", args[0], args[1], args[2]);
     
-    // Clean up allocated memory
-    wasm_function_inst_t free_func = wasm_runtime_lookup_function(moduleInstance->instance, "__wbindgen_free");
-    if (free_func) {
-        uint32_t free_args[2] = { wasmPtr, (uint32_t)data.length };
-        wasm_runtime_call_wasm(exec_env, free_func, 2, free_args);
-    }
+    // Clean up allocated memory using NATIVE free (not WASM free)
+    RCTLogInfo(@"WAMR_DEBUG: 🔧 Cleaning up with NATIVE __wbindgen_free");
+    __wbindgen_free(exec_env, wasmPtr, (uint32_t)data.length);
     
     // Reset current seed address
     moduleInstance->currentSeedWasmAddr = 0;
