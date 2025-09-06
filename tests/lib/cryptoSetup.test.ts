@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { setupCrypto, testCryptoPolyfill } from '../../lib/cryptoSetup';
+import { setupCrypto } from '../../lib/cryptoSetup';
 
 describe('Crypto Setup (Step 1)', () => {
   beforeAll(() => {
@@ -32,36 +32,8 @@ describe('Crypto Setup (Step 1)', () => {
     });
   });
 
-  describe('testCryptoPolyfill()', () => {
-    it('should validate crypto polyfill functionality', async () => {
-      const result = await testCryptoPolyfill();
-      
-      expect(result).toBeDefined();
-      expect(result.success).toBe(true);
-      expect(result.ed25519KeyPair).toBeDefined();
-      expect(result.x25519KeyPair).toBeDefined();
-    });
-
-    it('should generate valid Ed25519 key pairs', async () => {
-      const result = await testCryptoPolyfill();
-      const { ed25519KeyPair } = result;
-      
-      expect(ed25519KeyPair.publicKey).toBeDefined();
-      expect(ed25519KeyPair.privateKey).toBeDefined();
-      expect(ed25519KeyPair.publicKey.algorithm.name).toBe('Ed25519');
-      expect(ed25519KeyPair.privateKey.algorithm.name).toBe('Ed25519');
-    });
-
-    it('should generate valid X25519 key pairs', async () => {
-      const result = await testCryptoPolyfill();
-      const { x25519KeyPair } = result;
-      
-      expect(x25519KeyPair.publicKey).toBeDefined();
-      expect(x25519KeyPair.privateKey).toBeDefined();
-      expect(x25519KeyPair.publicKey.algorithm.name).toBe('X25519');
-      expect(x25519KeyPair.privateKey.algorithm.name).toBe('X25519');
-    });
-  });
+  // Note: testCryptoPolyfill() was removed as it's not part of the library
+  // The actual crypto polyfill functionality is tested in the sections below
 
   describe('Ed25519 Operations', () => {
     it('should generate unique key pairs', async () => {
