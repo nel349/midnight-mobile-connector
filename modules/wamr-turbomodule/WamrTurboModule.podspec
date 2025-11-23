@@ -78,6 +78,12 @@ Pod::Spec.new do |s|
       "WASM_ENABLE_GC=0",          # Disable GC, use legacy externref approach
       "WASM_ENABLE_STRINGREF=0",
       "WASM_ENABLE_WAMR_COMPILER=0",
+      "WASM_ENABLE_SIMD=1",        # ENABLED: Required for Midnight crypto operations
+      "WASM_DISABLE_HW_BOUND_CHECK=0", # ENABLED: Allow hardware bound checking for crypto security
+      "WASM_ENABLE_MEMORY_TRACING=0",  # Disabled: Not needed but keep disabled for performance
+      "WASM_ENABLE_DUMP_CALL_STACK=0", # Disabled: Not needed but keep disabled for minimal build
+      "WASM_ENABLE_THREAD_MGR=0",      # DISABLED: Causes linker issues with exception_lock
+      "WASM_ENABLE_SHARED_MEMORY=0",   # DISABLED: Not needed and simplifies build
       "BH_MALLOC=wasm_runtime_malloc",
       "BH_FREE=wasm_runtime_free"
     ].join(" "),
