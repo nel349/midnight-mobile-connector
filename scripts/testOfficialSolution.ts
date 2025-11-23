@@ -12,7 +12,7 @@ async function testOfficialSolution() {
   try {
     // Create providers
     console.log('\n🌐 === STEP 1: CREATE PROVIDERS ===');
-    const providers = await createProvidersForNetwork('local');
+    const providers = await createProvidersForNetwork('undeployed');
     console.log('✅ Providers created successfully');
     
     // Create official contract ledger reader

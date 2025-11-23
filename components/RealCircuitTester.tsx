@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
-import { DEFAULT_CONTRACT_ADDRESS } from '../lib/constants';
+import { DEFAULT_CONTRACT_ADDRESS, NETWORK_TYPES } from '../lib/constants';
 import { 
   type ContractMap, 
   type ParsedCircuit, 
@@ -24,7 +24,7 @@ import { CircuitExecutor, createBankContractExecutor, type CircuitExecutionResul
 
 interface RealCircuitTesterProps {
   onCircuitCall?: (circuit: ParsedCircuit, parameters: any[], result: any) => void;
-  networkType?: 'local' | 'testnet';
+  networkType?: 'undeployed' | 'testnet';
 }
 
 interface CircuitCall {
@@ -61,7 +61,7 @@ const getUserFriendlyPlaceholder = (arg: any): string => {
 
 export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({ 
   onCircuitCall, 
-  networkType = 'local' 
+  networkType = NETWORK_TYPES.UNDEPLOYED 
 }) => {
   const [contractMap, setContractMap] = useState<ContractMap | null>(null);
   const [selectedTab, setSelectedTab] = useState<TabType>('read');
@@ -88,7 +88,7 @@ export const RealCircuitTester: React.FC<RealCircuitTesterProps> = ({
         });
 
         console.log('🔧 Creating circuit executor...');
-        const executor = await createBankContractExecutor(contractAddress, (networkType as 'local' | 'testnet') || 'local');
+        const executor = await createBankContractExecutor(contractAddress, (networkType as 'undeployed' | 'testnet') || 'undeployed');
         setCircuitExecutor(executor);
         setIsInitialized(true);
         console.log('✅ Circuit executor ready!');

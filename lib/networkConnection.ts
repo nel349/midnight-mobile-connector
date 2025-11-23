@@ -11,13 +11,14 @@
 
 import { MidnightWallet } from './midnightWallet';
 import { NetworkId } from './addressGeneration';
+import { NETWORK_TYPES, NETWORK_NAMES } from './constants';
 import axios from 'axios';
 
 type NetworkIdType = typeof NetworkId[keyof typeof NetworkId];
 
 // Official Midnight Network endpoints from midnight-bank project
 export const MidnightNetworkEndpoints = {
-  testnet: {
+  [NETWORK_TYPES.TESTNET]: {
     name: 'TestNet-02',
     networkId: NetworkId.TestNet as NetworkIdType,
     // Official TestNet-02 endpoints
@@ -26,7 +27,7 @@ export const MidnightNetworkEndpoints = {
     proverServerUri: 'https://lace-dev.proof-pub.stg.midnight.tools',
     substrateNodeUri: 'https://rpc.testnet-02.midnight.network'
   },
-  undeployed: {
+  [NETWORK_TYPES.UNDEPLOYED]: {
     name: 'Undeployed (Local)',
     networkId: NetworkId.Undeployed as NetworkIdType,
     // Local development endpoints
@@ -35,7 +36,7 @@ export const MidnightNetworkEndpoints = {
     proverServerUri: 'http://localhost:6300',
     substrateNodeUri: 'http://127.0.0.1:8080'
   },
-  mainnet: {
+  [NETWORK_TYPES.MAINNET]: {
     name: 'MainNet',
     networkId: NetworkId.MainNet as NetworkIdType,
     // MainNet endpoints (coming soon)
@@ -117,7 +118,7 @@ export const testNetworkConnectivity = async (networkType: NetworkType): Promise
       if (!proverTest) {
         console.log('   ⚠️ Remote prover server unavailable (503), testing local fallback...');
         // Test local prover server fallback
-        const localProverUri = MidnightNetworkEndpoints.undeployed.proverServerUri;
+        const localProverUri = MidnightNetworkEndpoints[NETWORK_TYPES.UNDEPLOYED].proverServerUri;
         const localProverTest = await testHttpEndpoint(localProverUri);
         if (localProverTest) {
           console.log('   ✅ Local prover server available as fallback');
@@ -176,10 +177,10 @@ export const connectWalletToNetwork = async (
     };
     
     // If using testnet and remote prover failed, create hybrid endpoints with local prover
-    if (networkType === 'testnet' && connection.status === 'connected') {
+    if (networkType === NETWORK_TYPES.TESTNET && connection.status === 'connected') {
       const remoteProverWorking = await testHttpEndpoint(endpoints.proverServerUri);
       if (!remoteProverWorking) {
-        const localProverUri = MidnightNetworkEndpoints.undeployed.proverServerUri;
+        const localProverUri = MidnightNetworkEndpoints[NETWORK_TYPES.UNDEPLOYED].proverServerUri;
         const localProverWorking = await testHttpEndpoint(localProverUri);
         
         if (localProverWorking) {
@@ -794,7 +795,7 @@ export const getWalletBalance = async (connectedWallet: ConnectedWallet): Promis
     
     // Generate addresses from wallet key pairs for balance queries
     const { generateWalletAddresses } = await import('./addressGeneration');
-    const walletAddresses = await generateWalletAddresses(connectedWallet.wallet.keyPairs, 'TestNet');
+    const walletAddresses = await generateWalletAddresses(connectedWallet.wallet.keyPairs, NETWORK_NAMES.testnet);
     const addressStrings = walletAddresses.map(addr => addr.address);
     console.log(`   🔍 Querying balance for ${addressStrings.length} addresses...`);
     
@@ -858,17 +859,17 @@ const getCoinsByType = (coins: any[]): Record<string, number> => {
 export const getAvailableNetworks = (): Array<{key: NetworkType, name: string, description: string}> => {
   return [
     {
-      key: 'testnet',
+      key: NETWORK_TYPES.TESTNET,
       name: 'TestNet-02', 
       description: 'Persistent testnet for development'
     },
     {
-      key: 'undeployed',
+      key: NETWORK_TYPES.UNDEPLOYED,
       name: 'Local Development',
       description: 'Local undeployed network'
     },
     {
-      key: 'mainnet',
+      key: NETWORK_TYPES.MAINNET,
       name: 'MainNet',
       description: 'Production Midnight network (coming soon)'
     }

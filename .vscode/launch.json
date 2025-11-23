@@ -1,0 +1,17 @@
+{
+    "configurations": [
+        {
+            "name": "Radon IDE panel",
+            "type": "radon-ide",
+            "request": "launch",
+            "appRoot": "./",
+            "env": {},
+            "ios": {
+                "scheme": "MidnightWasmTest"
+            },
+            "isExpo": false,
+            "android": {},
+            "usePrebuild": false
+        }
+    ]
+}

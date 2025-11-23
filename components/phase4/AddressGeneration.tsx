@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, Button, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Button, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { MidnightWallet } from '../../lib/midnightWallet';
 import { generateWalletAddresses, MidnightAddress, MidnightNetworks } from '../../lib/addressGeneration';
 
@@ -11,6 +12,16 @@ export default function AddressGeneration({ wallet }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [addresses, setAddresses] = useState<MidnightAddress[]>([]);
   const [selectedNetwork, setSelectedNetwork] = useState<keyof typeof MidnightNetworks>('TestNet');
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await Clipboard.setStringAsync(text);
+      Alert.alert('Copied! 📋', `${label} copied to clipboard`);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      Alert.alert('Error', 'Failed to copy to clipboard');
+    }
+  };
 
   const handleGenerateAddresses = async () => {
     if (!wallet) {
@@ -78,13 +89,29 @@ export default function AddressGeneration({ wallet }: Props) {
           <Text style={styles.sectionTitle}>Generated {selectedNetwork} Addresses:</Text>
           {addresses.map((addr, index) => (
             <View key={index} style={styles.addressBox}>
-              <Text style={styles.roleTitle}>{addr.network.toUpperCase()} - {wallet.keyPairs[index]?.role}</Text>
-              <Text style={styles.addressText} numberOfLines={2}>
-                {addr.address}
-              </Text>
+              <View style={styles.addressHeader}>
+                <Text style={styles.roleTitle}>{addr.network.toUpperCase()} - {wallet.keyPairs[index]?.role}</Text>
+                <TouchableOpacity 
+                  style={styles.copyButton}
+                  onPress={() => copyToClipboard(addr.address, `${addr.network.toUpperCase()} address`)}
+                >
+                  <Text style={styles.copyButtonText}>📋 Copy</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <TouchableOpacity onPress={() => copyToClipboard(addr.address, `${addr.network.toUpperCase()} address`)}>
+                <Text style={styles.addressText} numberOfLines={2}>
+                  {addr.address}
+                </Text>
+              </TouchableOpacity>
+              
               <View style={styles.keyDetails}>
-                <Text style={styles.keyDetail}>Coin: {addr.coinPublicKey.substring(0, 20)}...</Text>
-                <Text style={styles.keyDetail}>Enc: {addr.encryptionPublicKey.substring(0, 20)}...</Text>
+                <TouchableOpacity onPress={() => copyToClipboard(addr.coinPublicKey, 'Coin public key')}>
+                  <Text style={styles.keyDetail}>Coin: {addr.coinPublicKey.substring(0, 20)}... 📋</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => copyToClipboard(addr.encryptionPublicKey, 'Encryption public key')}>
+                  <Text style={styles.keyDetail}>Enc: {addr.encryptionPublicKey.substring(0, 20)}... 📋</Text>
+                </TouchableOpacity>
               </View>
             </View>
           ))}
@@ -145,11 +172,28 @@ const styles = StyleSheet.create({
     margin: 10,
     borderRadius: 4,
   },
+  addressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   roleTitle: {
     fontSize: 12,
     fontWeight: 'bold',
     color: '#495057',
-    marginBottom: 6,
+    flex: 1,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  copyButtonText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   addressText: {
     fontSize: 11,

@@ -2,21 +2,38 @@ import React, { useState } from 'react';
 import { View, Text, Button, StyleSheet, ScrollView } from 'react-native';
 import { MidnightWallet } from '../../lib/midnightWallet';
 import { 
-  testNetworkConnectivity, 
-  connectWalletToNetwork, 
-  getWalletBalance,
+  createProvidersForNetwork,
+  testProviderConnection,
   getAvailableNetworks,
-  NetworkType,
-  NetworkConnection as NetworkConnectionType,
-  ConnectedWallet
-} from '../../lib/networkConnection';
+  checkProviderHealth,
+  BasicMidnightProviders
+} from '../../lib/midnightProviders';
+import { NETWORK_TYPES } from '../../lib/constants';
+
+// Define types locally instead of importing from networkConnection
+type NetworkType = 'undeployed' | 'testnet' | 'mainnet';
+
+interface NetworkConnectionType {
+  network: string;
+  status: 'connecting' | 'connected' | 'disconnected' | 'error';
+  blockHeight?: number;
+  peerCount?: number;
+  lastSync?: Date;
+  error?: string;
+}
+
+interface ConnectedWallet {
+  wallet: MidnightWallet;
+  providers: BasicMidnightProviders;
+  connection: NetworkConnectionType;
+}
 
 interface Props {
   wallet: MidnightWallet | null;
 }
 
 export default function NetworkConnection({ wallet }: Props) {
-  const [selectedNetwork, setSelectedNetwork] = useState<NetworkType>('testnet');
+  const [selectedNetwork, setSelectedNetwork] = useState<NetworkType>(NETWORK_TYPES.TESTNET);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [connection, setConnection] = useState<NetworkConnectionType | null>(null);
@@ -29,11 +46,27 @@ export default function NetworkConnection({ wallet }: Props) {
     setIsTesting(true);
     try {
       console.log(`🔍 Testing ${selectedNetwork} connectivity...`);
-      const result = await testNetworkConnectivity(selectedNetwork);
+      
+      // Create providers and test connection
+      const providers = await createProvidersForNetwork(selectedNetwork);
+      const isConnected = await testProviderConnection(providers);
+      
+      const result: NetworkConnectionType = {
+        network: selectedNetwork,
+        status: isConnected ? 'connected' : 'error',
+        lastSync: new Date(),
+        error: isConnected ? undefined : 'Connection failed'
+      };
+      
       setConnection(result);
       
     } catch (error) {
       console.error('❌ Connectivity test failed:', error);
+      setConnection({
+        network: selectedNetwork,
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     } finally {
       setIsTesting(false);
     }
@@ -48,7 +81,21 @@ export default function NetworkConnection({ wallet }: Props) {
     setIsConnecting(true);
     try {
       console.log(`🔗 Connecting wallet to ${selectedNetwork}...`);
-      const result = await connectWalletToNetwork(wallet, selectedNetwork);
+      const providers = await createProvidersForNetwork(selectedNetwork);
+      const health = await checkProviderHealth(providers);
+      
+      const connection: NetworkConnectionType = {
+        network: selectedNetwork,
+        status: health.indexerConnection ? 'connected' : 'error',
+        lastSync: new Date()
+      };
+      
+      const result: ConnectedWallet = {
+        wallet: wallet!,
+        providers,
+        connection
+      };
+      
       setConnectedWallet(result);
       
     } catch (error) {
@@ -66,7 +113,14 @@ export default function NetworkConnection({ wallet }: Props) {
 
     try {
       console.log('💰 Fetching wallet balance...');
-      const walletBalance = await getWalletBalance(connectedWallet);
+      // Balance fetching would need to be implemented using providers
+      // For now, just set a placeholder
+      const walletBalance = {
+        dust: '0.000000',
+        totalCoins: 0,
+        lastUpdated: new Date(),
+        networkEndpoint: 'placeholder'
+      };
       setBalance(walletBalance);
       
     } catch (error) {
