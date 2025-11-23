@@ -43,6 +43,13 @@ export default function TabLayout() {
           tabBarLabel: 'Midnight',
         }}
       />
+      <Tabs.Screen
+        name="wallet-test"
+        options={{
+          title: 'Wallet Test',
+          tabBarLabel: 'Wallet Test',
+        }}
+      />
     </Tabs>
   );
 }
